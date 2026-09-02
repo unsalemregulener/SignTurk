@@ -1,0 +1,13 @@
+services:
+  sign-turk:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./dataset/landmarks:/app/dataset/landmarks:ro
+    environment:
+      - TF_CPP_MIN_LOG_LEVEL=3
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped

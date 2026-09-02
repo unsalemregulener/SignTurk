@@ -1,0 +1,3 @@
+frontend/*.html linguist-language=JavaScript
+frontend/*.js linguist-language=JavaScript
+dataset/landmarks/*.json linguist-generated=true

@@ -1,0 +1,54 @@
+# Python bytecode and environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Packaging and tooling
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.nox/
+.ipynb_checkpoints/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Runtime state
+local_dev.db
+local_dev.db-*
+uploads/
+static/
+tmp/
+*.log
+
+# Local source recordings; README-ready exports live in docs/videos/
+/videos/
+
+# Generated datasets and optional MediaPipe downloads
+dataset/train/
+dataset/validation/
+frontend/mp_models/
+hand_landmarker.task
+pose_landmarker.task
+
+# Downloaded model assets (see model-assets.json)
+*.keras
+*.onnx
+*.part
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
