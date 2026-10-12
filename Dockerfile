@@ -2,6 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+LABEL org.opencontainers.image.source="https://github.com/unsalemregulener/SignTurk" \
+      org.opencontainers.image.title="SignTurk" \
+      org.opencontainers.image.description="Real-time Turkish Sign Language recognition with a 3D avatar"
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
@@ -13,12 +17,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend.py .
-COPY database.py .
-COPY models.py .
-COPY frontend/ frontend/
+# Model weights come from the GitHub release and are checked against model-assets.json
+COPY model-assets.json .
+COPY tools/download_models.py tools/download_models.py
 COPY demo_assets_179/ demo_assets_179/
+RUN python tools/download_models.py
+
+COPY backend.py database.py models.py landmark_smoother.py ./
+COPY text_processing/ text_processing/
+COPY frontend/ frontend/
+COPY landmarks/ landmarks/
+
+RUN useradd --create-home --uid 10001 signturk \
+    && mkdir -p uploads \
+    && chown -R signturk:signturk /app
+USER signturk
 
 EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4)" || exit 1
 
 CMD ["uvicorn", "backend:app", "--host", "0.0.0.0", "--port", "8000"]

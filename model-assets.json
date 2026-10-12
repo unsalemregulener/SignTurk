@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "release": "https://github.com/unsalemregulener/SignTurk/releases/tag/model-assets-v1",
+  "assets": [
+    {
+      "name": "live-179",
+      "url": "https://github.com/unsalemregulener/SignTurk/releases/download/model-assets-v1/live-179.keras",
+      "path": "demo_assets_179/model.keras",
+      "bytes": 62648152,
+      "sha256": "51c1acd57beb56cac81e21aa6eec5f1a3cbbc530bbc9c0beea3627cca9e6f1b6"
+    }
+  ]
+}

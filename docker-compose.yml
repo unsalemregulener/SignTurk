@@ -1,0 +1,11 @@
+services:
+  signturk:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - TF_CPP_MIN_LOG_LEVEL=3
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
