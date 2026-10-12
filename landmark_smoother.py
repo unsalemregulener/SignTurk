@@ -11,7 +11,7 @@ marked as smoothed.
 """
 
 import json, copy, math
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 
 # ── Configuration ──────────────────────────────────────────────
 GAUSSIAN_SIGMA   = 1.2    # temporal smoothing strength (in frames)
