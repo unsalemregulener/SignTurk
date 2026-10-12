@@ -5,7 +5,7 @@ over WebSocket, sentence assembly, and the landmark data that drives the
 3D avatar.
 """
 
-import os, json, time, traceback, uuid, logging, base64, shutil, tempfile, secrets
+import asyncio, os, json, time, traceback, uuid, logging, base64, shutil, tempfile, secrets
 import numpy as np
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 from database import engine, get_db, Base, database_name
 import models
 from text_processing.lexicon import restore_turkish, restore_turkish_words
+from live226 import Live226, prepare_frame
 from live_pipeline import (
     count_detected_hands as count_live_hands,
     hands_to_landmarks,
@@ -120,6 +121,9 @@ _candidate_landmark_dirs = [
 ]
 LANDMARKS_DIR  = None
 LANDMARK_INDEX = {}
+
+# 226-class ensemble with RTMW landmarks (loaded in the background at startup)
+LIVE226 = Live226()
 
 # ═══════════════════════════════════════════════════════════
 #  MEDIAPIPE INIT
@@ -596,7 +600,8 @@ async def health():
         "confidence_threshold": CONFIDENCE_THRESHOLD,
         "ui_file": UI_FILE.name,
         "ui_ready": UI_FILE.exists(),
-        "stream_paths": ["/api/predict/live", "/ws/stream"],
+        "stream_paths": ["/api/predict/live", "/ws/stream", "/api/predict/live226"],
+        "model_226": LIVE226.status(),
         "mediapipe_detection_threshold": MEDIAPIPE_DETECTION_CONFIDENCE,
         "mediapipe_tracking_threshold": MEDIAPIPE_TRACKING_CONFIDENCE,
         "mediapipe_static_image_mode": MEDIAPIPE_STATIC_IMAGE_MODE,
@@ -679,36 +684,114 @@ def logout(credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer
 
 
 # ═══════════════════════════════════════════════════════════
-#  ROUTES — live recognition WebSocket
+#  ROUTES — live recognition WebSockets
 # ═══════════════════════════════════════════════════════════
+SENTENCE_ACTIONS = ("approve", "reject", "undo", "reset_sentence", "clear_sentence")
+
+
+async def _authenticate_socket(websocket: WebSocket):
+    """(user id, email) for the ?token= of a WebSocket, or None after closing it.
+
+    Browsers cannot set headers on WebSocket requests, so the token comes in
+    the query string.
+    """
+    db = next(get_db())
+    try:
+        user = _user_for_token(websocket.query_params.get("token"), db)
+        identity = (user.id, user.email) if user else None
+    finally:
+        db.close()
+    if identity is None:
+        await websocket.close(code=1008, reason="Oturum açmanız gerekiyor")
+    return identity
+
+
+class SentenceSession:
+    """Approved words of one live connection.
+
+    A prediction only becomes part of the sentence (and of History) after the
+    user approves it. `candidate` is the latest confident prediction waiting
+    for that decision; `scores` keeps the confidences of the latest result so
+    an approved alternative is stored with its own confidence.
+    """
+
+    def __init__(self, db: Session, user_id: int, mode: str):
+        self.db = db
+        self.user_id = user_id
+        self.mode = mode
+        self.session_id = uuid.uuid4().hex[:8]
+        self.words: List[str] = []
+        self.candidate: Optional[str] = None
+        self.scores: Dict[str, float] = {}
+
+    def offer(self, word: str, confidence: float) -> None:
+        """A confident live prediction becomes the candidate."""
+        self.candidate = word
+        self.scores = {word: confidence}
+
+    def present(self, scores: Dict[str, float], candidate: Optional[str] = None) -> None:
+        """The result of one recorded sign replaces the previous one."""
+        self.candidate = candidate
+        self.scores = dict(scores)
+
+    def pending(self) -> Dict[str, Any]:
+        return {"pending_word": self.candidate,
+                "pending_text": restore_turkish(self.candidate) if self.candidate else None}
+
+    def handle(self, action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply an approval action and return the reply for the client."""
+        if action == "approve":
+            word = (payload.get("word") or self.candidate or "").strip()
+            if word:
+                self.words.append(word)
+                score = self.scores.get(word)
+                self._save(word, format_confidence(score) if score is not None else "-")
+            self._forget()
+            return self._sentence(added=word or None)
+        if action == "reject":
+            self._forget()
+            return {"type": "rejected"}
+        if action == "undo":
+            if self.words:
+                self.words.pop()
+            return self._sentence()
+        self.words = []
+        self._forget()
+        return self._sentence()
+
+    def _forget(self) -> None:
+        self.candidate = None
+        self.scores = {}
+
+    def _sentence(self, **extra) -> Dict[str, Any]:
+        return {"type": "sentence_update", "words": list(self.words),
+                "display_words": restore_turkish_words(self.words),
+                "sentence": assemble_sentence(self.words), **extra}
+
+    def _save(self, word: str, confidence: str) -> None:
+        try:
+            self.db.add(models.History(user_id=self.user_id, session_id=self.session_id,
+                                       mode=self.mode, result=word, confidence=confidence))
+            self.db.commit()
+        except Exception as e:
+            self.db.rollback()
+            logger.warning(f"[DB] approved word save skipped: {e}")
+
+
 @app.websocket("/ws/stream")
 @app.websocket("/api/predict/live")
 async def live_predict(websocket: WebSocket):
-    # Browsers cannot set headers on WebSocket requests, so the token comes
-    # in the query string.
-    auth_db = next(get_db())
-    try:
-        user = _user_for_token(websocket.query_params.get("token"), auth_db)
-        user_id = user.id if user else None
-        user_email = user.email if user else None
-    finally:
-        auth_db.close()
-    if user_id is None:
-        await websocket.close(code=1008, reason="Oturum açmanız gerekiyor")
+    identity = await _authenticate_socket(websocket)
+    if identity is None:
         return
+    user_id, user_email = identity
     await websocket.accept()
     logger.info("[WS-LIVE] Connected")
     db = next(get_db())
     add_log_db(db, "Info", "Canlı akış bağlandı", user_email)
     buf = FrameBuffer(seq_len=CAPTURE_WINDOW)
     missed_hand_frames = 0
-    # A prediction only becomes part of the sentence (and of History) after
-    # the user approves it. last_candidate holds the latest confident
-    # prediction that is waiting for that decision.
-    session_id = uuid.uuid4().hex[:8]
-    sentence_words: List[str] = []
-    last_candidate: Optional[str] = None
-    last_candidate_conf: Optional[float] = None
+    session = SentenceSession(db, user_id, mode="Live")
     try:
         while True:
             incoming = await websocket.receive_text()
@@ -719,52 +802,8 @@ async def live_predict(websocket: WebSocket):
                 payload = json.loads(incoming)
                 action = payload.get("action") if isinstance(payload, dict) else None
                 if action:
-                    # ── approval control channel ───────────────
-                    if action == "approve":
-                        word = (payload.get("word") or last_candidate or "").strip()
-                        if word:
-                            sentence_words.append(word)
-                            conf = (format_confidence(last_candidate_conf)
-                                    if word == last_candidate and last_candidate_conf is not None
-                                    else "-")
-                            try:
-                                db.add(models.History(
-                                    user_id=user_id, session_id=session_id, mode="Live",
-                                    result=word, confidence=conf,
-                                ))
-                                db.commit()
-                            except Exception as e:
-                                db.rollback()
-                                logger.warning(f"[DB] approved word save skipped: {e}")
-                        last_candidate = None
-                        last_candidate_conf = None
-                        await websocket.send_json({
-                            "type": "sentence_update",
-                            "words": list(sentence_words),
-                            "display_words": restore_turkish_words(sentence_words),
-                            "sentence": assemble_sentence(sentence_words),
-                            "added": word or None,
-                        })
-                    elif action == "reject":
-                        last_candidate = None
-                        last_candidate_conf = None
-                        await websocket.send_json({"type": "rejected"})
-                    elif action == "undo":
-                        if sentence_words:
-                            sentence_words.pop()
-                        await websocket.send_json({
-                            "type": "sentence_update",
-                            "words": list(sentence_words),
-                            "display_words": restore_turkish_words(sentence_words),
-                            "sentence": assemble_sentence(sentence_words),
-                        })
-                    elif action in ("reset_sentence", "clear_sentence"):
-                        sentence_words = []
-                        last_candidate = None
-                        last_candidate_conf = None
-                        await websocket.send_json({
-                            "type": "sentence_update", "words": [], "display_words": [], "sentence": "",
-                        })
+                    if action in SENTENCE_ACTIONS:
+                        await websocket.send_json(session.handle(action, payload))
                     continue
                 if "landmarks" in payload:
                     arr = np.array(payload["landmarks"], dtype=np.float32)
@@ -853,13 +892,9 @@ async def live_predict(websocket: WebSocket):
                 "buffer_length": len(buf),
             }
 
-            # Remember the latest confident prediction as the approval
-            # candidate; nothing is stored until the user approves it.
             if prediction["above_threshold"]:
-                last_candidate = prediction["label_tr"]
-                last_candidate_conf = prediction["confidence"]
-            result["pending_word"] = last_candidate
-            result["pending_text"] = restore_turkish(last_candidate) if last_candidate else None
+                session.offer(prediction["label_tr"], prediction["confidence"])
+            result.update(session.pending())
 
             await websocket.send_json(result)
             buf.keep_tail(LIVE_BUFFER_STRIDE)
@@ -870,6 +905,74 @@ async def live_predict(websocket: WebSocket):
     except Exception as e:
         logger.error(f"[WS-LIVE] Error: {e}\n{traceback.format_exc()}")
         add_log_db(db, "Warning", f"Canlı akış hatası: {e}", user_email)
+    finally:
+        db.close()
+
+
+MIN_CLIP_FRAMES = 8
+MAX_CLIP_FRAMES = 96
+
+
+@app.websocket("/api/predict/live226")
+async def live226_predict(websocket: WebSocket):
+    """One recorded sign at a time with the 226-class ensemble.
+
+    The client sends {"action": "start"}, the clip's unmirrored frames as
+    {"image": data_url}, then {"action": "end"}. Each frame is processed as it
+    arrives ({"type": "progress"}); "end" returns {"type": "result"} with the
+    top three signs. Approval actions work as on /api/predict/live.
+    """
+    identity = await _authenticate_socket(websocket)
+    if identity is None:
+        return
+    user_id, user_email = identity
+    await websocket.accept()
+    if not LIVE226.ready:
+        await websocket.send_json({"type": "unavailable", **LIVE226.status()})
+        await websocket.close(code=1013)
+        return
+    db = next(get_db())
+    add_log_db(db, "Info", "226 canlı akış bağlandı", user_email)
+    session = SentenceSession(db, user_id, mode="Live226")
+    clip: List[np.ndarray] = []
+    boxes = None
+    try:
+        while True:
+            try:
+                payload = json.loads(await websocket.receive_text())
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if not isinstance(payload, dict):
+                continue
+            action = payload.get("action")
+            if action in SENTENCE_ACTIONS:
+                await websocket.send_json(session.handle(action, payload))
+            elif action == "start":
+                clip, boxes = [], None
+                await websocket.send_json({"type": "recording", "frame_count": LIVE226.frame_count})
+            elif action == "end":
+                if len(clip) < MIN_CLIP_FRAMES:
+                    await websocket.send_json({"type": "result", "error": "Kayıt çok kısa", "frames": len(clip)})
+                else:
+                    result = await asyncio.to_thread(LIVE226.predict, clip)
+                    top = result["top"]
+                    session.present({row["gloss"]: row["confidence"] for row in top},
+                                    candidate=top[0]["gloss"] if result["confident"] else None)
+                    await websocket.send_json({"type": "result", "frames": len(clip), **result, **session.pending()})
+                clip, boxes = [], None
+            elif payload.get("image") and len(clip) < MAX_CLIP_FRAMES:
+                frame = decode_base64_image(payload["image"])
+                if frame is None:
+                    continue
+                reuse = boxes if len(clip) % LIVE226.detect_every else None
+                landmarks, boxes = await asyncio.to_thread(LIVE226.landmarks, prepare_frame(frame), reuse)
+                clip.append(landmarks)
+                await websocket.send_json({"type": "progress", "processed": len(clip)})
+    except WebSocketDisconnect:
+        add_log_db(db, "Info", "226 canlı akış kapandı", user_email)
+    except Exception as e:
+        logger.error(f"[WS-226] Error: {e}\n{traceback.format_exc()}")
+        add_log_db(db, "Warning", f"226 canlı akış hatası: {e}", user_email)
     finally:
         db.close()
 
@@ -917,6 +1020,7 @@ def _model_status() -> Dict[str, Any]:
         "confidence_threshold": CONFIDENCE_THRESHOLD,
         "avg_inference": f"{AVG_INFERENCE_MS:.0f} ms" if INFERENCE_COUNT else "Henüz yok",
         "database": database_name(),
+        "model_226": LIVE226.status(),
     }
 
 
@@ -1066,12 +1170,14 @@ async def startup_event():
 
     load_model_assets()
     load_landmark_index()
+    LIVE226.start_loading()
 
     logger.info("=" * 60)
     logger.info("  SignTurk backend ready")
     logger.info(f"  Model:      {'LOADED' if MODEL else 'MISSING'}")
     logger.info(f"  Landmarks:  {len(LANDMARK_INDEX)} words")
     logger.info(f"  MediaPipe:  {'READY' if MP_HANDS else 'MISSING'}")
+    logger.info(f"  226 model:  {LIVE226.state.upper()}")
     logger.info("=" * 60)
 
 

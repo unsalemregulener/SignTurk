@@ -392,6 +392,15 @@
     }
     .camera-panel.running .scan-line{display:block}
     @keyframes scan{0%{top:8%}100%{top:92%}}
+    .camera-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .mode-switch{display:inline-flex;gap:3px;padding:3px;border-radius:999px;background:#111b2c;border:1px solid #27344a}
+    .mode-switch button{min-height:26px;padding:0 11px;border-radius:999px;background:transparent;color:#c9d6e5;font-size:12px;font-weight:800}
+    .mode-switch button.active{background:var(--teal);color:#04121a}
+    .mode-switch button:disabled:not(.active){opacity:.45;cursor:not-allowed}
+    .countdown{position:absolute;inset:0;display:grid;place-items:center;font-size:96px;font-weight:900;color:#fff;text-shadow:0 4px 28px rgba(0,0,0,.6);pointer-events:none}
+    .alert.warn{background:#fff8eb;color:#b45309;border-color:#fde68a}
+    button.top-row{width:100%;text-align:left;font:inherit;color:inherit}
+    button.top-row:hover{border-color:var(--teal)}
     .camera-controls{
       min-height:66px;
       padding:12px 14px;
@@ -584,6 +593,7 @@ const API = {
     logout: "/api/logout",
     register: "/api/register",
     live: "/api/predict/live",
+    live226: "/api/predict/live226",
     history: "/api/history",
     summary: "/api/me/summary",
     modelStatus: "/api/model/status",
@@ -601,6 +611,10 @@ window.SIGNTURK_API = API;
 
 // About 10 frames per second: a 32-frame window covers roughly 3 seconds of signing.
 const SEND_INTERVAL_MS = 100;
+// 226 mode records one sign at a time: 32 frames at about 12 fps (2.7 seconds).
+const CLIP_FRAMES = 32;
+const CLIP_INTERVAL_MS = 83;
+const MODE_KEY = "signturk_live_mode";
 
 const routes = [
   {id:"dashboard", label:"Panel", icon:"Home"},
@@ -905,9 +919,21 @@ function LivePage(){
   const [pending, setPending] = useState(null);
   const [sentenceWords, setSentenceWords] = useState([]);
   const [sentence, setSentence] = useState("");
-  const [health] = useHealth(false);
+  const [health] = useHealth(true);
   // Frames collected before each prediction; the server resamples them to the model length
   const windowLen = health?.capture_window || 32;
+  // "179": continuous MediaPipe stream; "226": one recorded sign at a time
+  const [mode, setMode] = useState(() => {
+    try{ return localStorage.getItem(MODE_KEY) === "226" ? "226" : "179"; }catch{ return "179"; }
+  });
+  useEffect(() => { try{ localStorage.setItem(MODE_KEY, mode); }catch{} }, [mode]);
+  const model226 = health?.model_226;
+  const ready226 = !!model226?.ready;
+  const clipTimerRef = useRef(null);
+  const [clipState, setClipState] = useState("idle");   // idle, countdown, recording, processing
+  const [countdown, setCountdown] = useState(0);
+  const [clipProgress, setClipProgress] = useState({sent:0, processed:0});
+  const [result226, setResult226] = useState(null);
   const speechRateRef = useRef(1);
   useEffect(() => {
     apiFetch(API.endpoints.settings).then(s => {
@@ -930,6 +956,9 @@ function LivePage(){
 
   const stopLive = useCallback(() => {
     if (timerRef.current){ clearTimeout(timerRef.current); timerRef.current = null; }
+    if (clipTimerRef.current){ clearTimeout(clipTimerRef.current); clearInterval(clipTimerRef.current); clipTimerRef.current = null; }
+    setClipState("idle");
+    setCountdown(0);
     inFlightRef.current = false;
     predictionHoldUntilRef.current = 0;
     if (wsRef.current){
@@ -948,17 +977,17 @@ function LivePage(){
     setStatus("Durduruldu");
   }, []);
 
-  const captureFrame = useCallback(() => {
+  // Frames are sent unmirrored; only the preview is mirrored with CSS.
+  const captureFrame = useCallback((targetW = 420, quality = 0.72) => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas || !video.videoWidth || !video.videoHeight) return null;
-    const targetW = 420;
     const targetH = Math.max(260, Math.round(targetW * video.videoHeight / video.videoWidth));
     canvas.width = targetW;
     canvas.height = targetH;
     const ctx = canvas.getContext("2d", {willReadFrequently:false});
     ctx.drawImage(video, 0, 0, targetW, targetH);
-    return canvas.toDataURL("image/jpeg", 0.72);
+    return canvas.toDataURL("image/jpeg", quality);
   }, []);
 
   const scheduleSend = useCallback(() => {
@@ -1004,6 +1033,47 @@ function LivePage(){
 
   const undoWord = useCallback(() => sendAction({action:"undo"}), [sendAction]);
   const resetSentence = useCallback(() => sendAction({action:"reset_sentence"}), [sendAction]);
+  const approveGloss = useCallback((gloss) => sendAction({action:"approve", word:gloss}), [sendAction]);
+
+  // 226 mode: 3-2-1, then 32 frames streamed as they are captured, then "end".
+  const recordSign = useCallback(() => {
+    if (clipState !== "idle") return;
+    setResult226(null);
+    setPending(null);
+    setClipState("countdown");
+    let remaining = 3;
+    setCountdown(remaining);
+    const tick = () => {
+      remaining -= 1;
+      if (remaining > 0){
+        setCountdown(remaining);
+        clipTimerRef.current = setTimeout(tick, 1000);
+        return;
+      }
+      setCountdown(0);
+      setClipState("recording");
+      setStatus("Kaydediliyor");
+      setClipProgress({sent:0, processed:0});
+      sendAction({action:"start"});
+      let sent = 0;
+      clipTimerRef.current = setInterval(() => {
+        const image = captureFrame(640, 0.8);
+        if (image){
+          sendAction({image});
+          sent += 1;
+          setClipProgress(prev => ({...prev, sent}));
+        }
+        if (sent >= CLIP_FRAMES){
+          clearInterval(clipTimerRef.current);
+          clipTimerRef.current = null;
+          sendAction({action:"end"});
+          setClipState("processing");
+          setStatus("İşleniyor");
+        }
+      }, CLIP_INTERVAL_MS);
+    };
+    clipTimerRef.current = setTimeout(tick, 1000);
+  }, [clipState, captureFrame, sendAction]);
 
   const commitPrediction = useCallback((data) => {
     setStreamMeta(prev => ({
@@ -1049,20 +1119,42 @@ function LivePage(){
         await videoRef.current.play();
       }
       await loadDevices();
-      const ws = new WebSocket(`${API.wsUrl}${API.endpoints.live}?token=${encodeURIComponent(storedToken())}`);
+      const endpoint = mode === "226" ? API.endpoints.live226 : API.endpoints.live;
+      const ws = new WebSocket(`${API.wsUrl}${endpoint}?token=${encodeURIComponent(storedToken())}`);
       wsRef.current = ws;
       ws.onopen = () => {
         inFlightRef.current = false;
         predictionHoldUntilRef.current = 0;
         setRunning(true);
         setStarting(false);
-        setStatus("Bağlandı");
-        scheduleSend();
+        setResult226(null);
+        setClipState("idle");
+        if (mode === "226") setStatus("Hazır · işareti kaydedin");
+        else{ setStatus("Bağlandı"); scheduleSend(); }
       };
       ws.onmessage = (event) => {
         inFlightRef.current = false;
         try{
           const data = JSON.parse(event.data);
+          if (data.type === "unavailable"){
+            setError(data.message || "226 modeli hazır değil.");
+            return;
+          }
+          if (data.type === "recording") return;
+          if (data.type === "progress"){
+            setClipProgress(prev => ({...prev, processed:data.processed || 0}));
+            return;
+          }
+          if (data.type === "result"){
+            setClipState("idle");
+            if (data.error){ setStatus(data.error); return; }
+            setResult226(data);
+            const top = data.top?.[0];
+            setPending(data.pending_word ? {word:data.pending_word, text:data.pending_text || data.pending_word} : null);
+            setStatus(data.confident ? "Tahmin hazır" : "Düşük güven · listeden seçebilirsiniz");
+            if (top) setRecent(prev => [{label:top.text_tr, conf:top.confidence, at:new Date().toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}, ...prev].slice(0,10));
+            return;
+          }
           if (data.type === "sentence_update"){
             setSentenceWords(Array.isArray(data.display_words) ? data.display_words : (Array.isArray(data.words) ? data.words : []));
             setSentence(data.sentence || "");
@@ -1088,6 +1180,7 @@ function LivePage(){
       ws.onclose = (event) => {
         inFlightRef.current = false;
         setRunning(false);
+        setClipState("idle");
         if (event.code === 1008){ setError("Oturum süresi doldu, yeniden giriş yapın."); window.dispatchEvent(new Event("signturk:logout")); }
         else if (!starting) setStatus("Bağlantı kapandı");
       };
@@ -1097,29 +1190,56 @@ function LivePage(){
     }finally{
       setStarting(false);
     }
-  }, [deviceId, loadDevices, scheduleSend, commitPrediction, stopLive, starting, speak]);
+  }, [deviceId, loadDevices, scheduleSend, commitPrediction, stopLive, starting, speak, mode]);
 
+  const is226 = mode === "226";
+  const top226 = result226?.top || [];
   const bufferLen = streamMeta?.buffer_length || 0;
-  const bufferPct = Math.max(0, Math.min(100, Math.round((bufferLen / windowLen) * 100)));
-  const hasPrediction = prediction && prediction.class_id !== -1;
-  const confPct = hasPrediction ? Math.round(Number(prediction?.confidence || 0) * 100) : 0;
-  const predictedText = hasPrediction ? (prediction.text_tr || prediction.label_tr) : "";
-  const displayLabel = hasPrediction
-    ? (prediction.above_threshold === false ? `(${predictedText}?)` : predictedText)
-    : (running ? "Toplanıyor" : "Hazır");
-  const displaySub = hasPrediction
-    ? `${prediction?.label_en || "SIGNTURK"} · class ${prediction?.class_id ?? "-"}`
-    : (streamMeta?.label_tr || status);
+  const bufferPct = is226
+    ? Math.round((clipProgress.processed / CLIP_FRAMES) * 100)
+    : Math.max(0, Math.min(100, Math.round((bufferLen / windowLen) * 100)));
+  const hasPrediction = is226 ? top226.length > 0 : (prediction && prediction.class_id !== -1);
+  const confident = is226 ? !!result226?.confident : prediction?.above_threshold;
+  const confPct = !hasPrediction ? 0 : Math.round(Number(is226 ? top226[0].confidence : prediction?.confidence || 0) * 100);
+  const predictedText = !hasPrediction ? "" : (is226 ? top226[0].text_tr : (prediction.text_tr || prediction.label_tr));
+  const clipLabel = {
+    countdown: "Hazırlanın",
+    recording: `Kayıt ${clipProgress.sent}/${CLIP_FRAMES}`,
+    processing: `İşleniyor ${clipProgress.processed}/${CLIP_FRAMES}`,
+  }[clipState];
+  const displayLabel = clipLabel && is226 ? clipLabel
+    : hasPrediction ? (confident === false ? `(${predictedText}?)` : predictedText)
+    : (running ? (is226 ? "Kayda hazır" : "Toplanıyor") : "Hazır");
+  const displaySub = is226
+    ? (hasPrediction ? `AUTSL ${top226[0].class_id} · ${result226.frames} kare · model ${Math.round(result226.model_ms)} ms` : "226 işaret · RTMW")
+    : hasPrediction
+      ? `${prediction?.label_en || "SIGNTURK"} · class ${prediction?.class_id ?? "-"}`
+      : (streamMeta?.label_tr || status);
   const resultStatus = hasPrediction ? `Son tahmin ekranda · ${status}` : status;
+  const unavailable226 = model226 && !ready226
+    ? (model226.state === "loading" ? "226 modeli yükleniyor…" : (model226.message || "226 modeli hazır değil."))
+    : (!model226 ? "226 modeli bu sunucuda yok." : "");
   return (
     <div className="live-layout">
       <section className={`camera-panel ${running ? "running" : ""}`}>
         <div className="camera-top">
-          <strong>SIGNTURK Kamera</strong>
+          <div className="camera-title">
+            <strong>SIGNTURK Kamera</strong>
+            <div className="mode-switch" role="group" aria-label="Model">
+              <button className={!is226 ? "active" : ""} disabled={running || starting} onClick={() => setMode("179")} title="Kamera akışı sürekli izlenir">Hızlı · 179</button>
+              <button className={is226 ? "active" : ""} disabled={running || starting || !ready226} onClick={() => setMode("226")} title={unavailable226 || "Her işaret ayrı kaydedilir"}>Kapsamlı · 226</button>
+            </div>
+          </div>
           <div className="camera-meta">
             <span className={`dark-chip ${running ? "ok" : ""}`}><Icon name={running ? "Wifi" : "WifiOff"} size={14}/> {running ? "Açık" : "Kapalı"}</span>
-            <span className="dark-chip"><Icon name="Layers" size={14}/> {bufferLen}/{windowLen}</span>
-            <span className={`dark-chip ${(streamMeta?.hands_detected || 0) > 0 ? "ok" : "warn"}`}><Icon name="Hand" size={14}/> {streamMeta?.hands_detected ?? 0} el</span>
+            {is226 ? (
+              <span className="dark-chip"><Icon name="Layers" size={14}/> {clipProgress.processed}/{CLIP_FRAMES}</span>
+            ) : (
+              <>
+                <span className="dark-chip"><Icon name="Layers" size={14}/> {bufferLen}/{windowLen}</span>
+                <span className={`dark-chip ${(streamMeta?.hands_detected || 0) > 0 ? "ok" : "warn"}`}><Icon name="Hand" size={14}/> {streamMeta?.hands_detected ?? 0} el</span>
+              </>
+            )}
           </div>
         </div>
         <div className="video-wrap">
@@ -1129,18 +1249,22 @@ function LivePage(){
               <div>
                 <Icon name="Camera" size={38}/>
                 <h3>Kamera bekliyor</h3>
-                <p>Başlat düğmesiyle canlı akış açılır.</p>
+                <p>{is226 ? "Başlattıktan sonra her işareti \"İşareti kaydet\" ile ayrı kaydedin." : "Başlat düğmesiyle canlı akış açılır."}</p>
               </div>
             </div>
           )}
+          {clipState === "countdown" && <div className="countdown">{countdown}</div>}
           <div className="scan-line" />
         </div>
         <div className="camera-controls">
           <div className="control-left">
             {!running ? (
-              <button className="btn green" onClick={startLive} disabled={starting}><Icon name="Play"/> {starting ? "Açılıyor" : "Başlat"}</button>
+              <button className="btn green" onClick={startLive} disabled={starting || (is226 && !ready226)}><Icon name="Play"/> {starting ? "Açılıyor" : "Başlat"}</button>
             ) : (
               <button className="btn red" onClick={stopLive}><Icon name="Square"/> Durdur</button>
+            )}
+            {is226 && running && (
+              <button className="btn primary" onClick={recordSign} disabled={clipState !== "idle"}><Icon name="Video"/> İşareti kaydet</button>
             )}
             <button className="btn" onClick={() => setMirrorPreview(v => !v)}><Icon name="RefreshCw"/> Önizleme</button>
           </div>
@@ -1155,9 +1279,11 @@ function LivePage(){
       </section>
       <aside className="grid result-panel" style={{gap:16}}>
         {error && <div className="alert bad">{error}</div>}
+        {is226 && unavailable226 && <div className="alert warn">{unavailable226}</div>}
         <section className="panel">
-          <div className="panel-head"><div><h3>Anlık Tahmin</h3><span>{resultStatus}</span></div><span className={`chip ${prediction?.above_threshold ? "ok" : "warn"}`}>{confPct}%</span></div>
+          <div className="panel-head"><div><h3>Anlık Tahmin</h3><span>{resultStatus}</span></div><span className={`chip ${confident ? "ok" : "warn"}`}>{confPct}%</span></div>
           <div className="panel-body">
+            {is226 && result226?.feedback && <div className="alert warn" style={{margin:0}}>{result226.feedback}</div>}
             <div className="prediction">
               <div>
                 <div className="prediction-label">{displayLabel}</div>
@@ -1197,9 +1323,19 @@ function LivePage(){
           </div>
         </section>
         <section className="panel">
-          <div className="panel-head"><div><h3>En İyi Tahminler</h3><span>Top-3 model çıktısı</span></div></div>
+          <div className="panel-head"><div><h3>En İyi Tahminler</h3><span>{is226 ? "Doğru olanı seçerek onaylayın" : "Top-3 model çıktısı"}</span></div></div>
           <div className="panel-body">
-            {prediction?.top_predictions?.length ? (
+            {is226 ? (top226.length ? (
+              <div className="top-list">
+                {top226.map((p,i) => (
+                  <button className="top-row" key={p.gloss} onClick={() => approveGloss(p.gloss)} disabled={!running} title="Bu işareti onayla">
+                    <div className="rank">{i+1}</div>
+                    <div><strong>{p.text_tr}</strong><span>AUTSL {p.class_id}</span></div>
+                    <strong>{percent(p.confidence)}</strong>
+                  </button>
+                ))}
+              </div>
+            ) : <div className="empty">Kaydedilen işaretin ilk üç tahmini burada görünür.</div>) : prediction?.top_predictions?.length ? (
               <div className="top-list">
                 {prediction.top_predictions.map((p,i) => (
                   <div className="top-row" key={i}>
@@ -1429,7 +1565,10 @@ function AdminModel(){
     ["Yakalama penceresi", m.capture_window ? `${m.capture_window} kare` : "-", m.seq_len ? `${m.seq_len} kareye örneklenir` : ""],
     ["Label map", m.label_map_size ?? "-", "etiket kaydı"],
     ["Ortalama inference", m.avg_inference ?? "-", "tahmin süresi"],
-    ["Güven eşiği", m.confidence_threshold ?? "-", "yayın eşiği"]
+    ["Güven eşiği", m.confidence_threshold ?? "-", "yayın eşiği"],
+    ["226 modeli", {ready:"Hazır", loading:"Yükleniyor", missing:"Dosyalar eksik", error:"Hata", disabled:"Kapalı"}[m.model_226?.state] || "-",
+      m.model_226?.device ? `RTMW · ${m.model_226.device}` : (m.model_226?.message || ""), m.model_226?.ready],
+    ["226 kare süresi", m.model_226?.avg_frame_ms != null ? `${m.model_226.avg_frame_ms} ms` : "Henüz yok", "kare başına RTMW"]
   ];
   return (
     <section className="panel"><div className="panel-head"><div><h3>Model Durumu</h3><span>Pipeline özeti</span></div></div>

@@ -16,6 +16,7 @@ import os
 import secrets
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,6 +66,40 @@ def video_frame_data_url(path, position=0.5):
         raise RuntimeError(f"could not read a frame from {path}")
     ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
     return "data:image/jpeg;base64," + base64.b64encode(jpeg.tobytes()).decode("ascii")
+
+
+def camera_clip(path, count=32, end=0.55):
+    """Camera-panel frames of the recorded interface, as data URLs.
+
+    docs/videos/cay.mp4 is a screen recording: the sign is made during the
+    first ~55% and the camera preview on screen was mirrored, so the panel is
+    cropped and flipped back.
+    """
+    capture = cv2.VideoCapture(str(path))
+    frames = []
+    while True:
+        ok, frame = capture.read()
+        if not ok:
+            break
+        frames.append(frame)
+    capture.release()
+    last = max(int(len(frames) * end) - 1, 0)
+    clip = []
+    for index in np.linspace(0, last, count).round().astype(int):
+        panel = cv2.flip(frames[index][222:612, 256:882], 1)
+        ok, jpeg = cv2.imencode(".jpg", panel, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        clip.append("data:image/jpeg;base64," + base64.b64encode(jpeg.tobytes()).decode("ascii"))
+    return clip
+
+
+def wait_for_226(client, seconds=900):
+    """The 226 models load in the background; wait until they settle."""
+    deadline = time.time() + seconds
+    while True:
+        status = client.get("/api/health").json()["model_226"]
+        if status["state"] not in ("idle", "loading") or time.time() > deadline:
+            return status
+        time.sleep(2)
 
 
 def synthetic_hands(n):
@@ -183,6 +218,37 @@ with TestClient(backend.app) as client:
           all(row["confidence"] == "-" or row["confidence"].endswith("%") for row in history), history)
     check("history is per user", client.get("/api/history", headers=A).json() == [])
     check("summary counts approved words", client.get("/api/me/summary", headers=U).json()["translations"] == 3)
+
+    status = wait_for_226(client)
+    check("226 model ready", status["ready"], status)
+    if status["ready"]:
+        clip = camera_clip(ROOT / "docs" / "videos" / "cay.mp4")
+        with client.websocket_connect(f"/api/predict/live226?token={user_token}") as ws:
+            ws.send_text(json.dumps({"action": "start"}))
+            check("226 recording starts", ws.receive_json().get("type") == "recording")
+            started = time.time()
+            processed = 0
+            for frame in clip:
+                ws.send_text(json.dumps({"image": frame}))
+                processed = ws.receive_json().get("processed", processed)
+            ws.send_text(json.dumps({"action": "end"}))
+            result = ws.receive_json()
+            elapsed = time.time() - started
+            top = result.get("top", [])
+            print(f"     226 on the cay clip: {[(row['gloss'], row['confidence']) for row in top]}"
+                  f" | {elapsed:.1f}s for {len(clip)} frames, model {result.get('model_ms')} ms,"
+                  f" feedback {result.get('feedback')!r}")
+            check("226 processes every frame", processed == len(clip) == result.get("frames"), (processed, result))
+            check("226 returns three candidates with Turkish spelling",
+                  len(top) == 3 and all(row["text_tr"] == restore_turkish(row["gloss"]) for row in top), result)
+            ws.send_text(json.dumps({"action": "approve", "word": top[0]["gloss"] if top else "cay"}))
+            update = ws.receive_json()
+            check("226 approval updates the sentence", update.get("type") == "sentence_update" and len(update["words"]) == 1,
+                  update)
+        rows = client.get("/api/history", headers=U).json()
+        check("226 approval stored as Live226 with its confidence",
+              rows[0]["mode"] == "Live226" and rows[0]["confidence"].endswith("%"), rows[:1])
+        print("     226 extraction:", client.get("/api/health").json()["model_226"].get("avg_frame_ms"), "ms per frame")
 
     client.post("/api/logout", headers=U)
     check("token revoked after logout", client.get("/api/history", headers=U).status_code == 401)
