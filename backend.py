@@ -343,7 +343,7 @@ def get_label(model_index: int) -> Dict[str, Any]:
         return {"class_id": model_index,
                 "label_tr": gloss,
                 "text_tr": restore_turkish(gloss),
-                "label_en": e.get("EN", f"class_{model_index}")}
+                "label_en": e.get("EN", f"class_{model_index}").replace("_", " ")}
     return {"class_id": model_index,
             "label_tr": f"class_{model_index}",
             "text_tr": f"class_{model_index}",
