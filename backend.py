@@ -28,7 +28,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
-from database import engine, get_db, Base
+from database import engine, get_db, Base, database_name
 import models
 
 # ── Landmark smoothing ───────────────────────────────────
@@ -629,7 +629,7 @@ async def health():
         "model_loaded": MODEL is not None,
         "mediapipe_ready": MP_HANDS is not None,
         "landmark_count": len(LANDMARK_INDEX),
-        "database": "Supabase PostgreSQL",
+        "database": database_name(),
         "seq_len": SEQ_LEN,
         "feat_dim": FEAT_DIM,
         "num_classes": NUM_CLASSES,
@@ -948,7 +948,7 @@ def _model_status() -> Dict[str, Any]:
         "mediapipe_ready": MP_HANDS is not None,
         "confidence_threshold": CONFIDENCE_THRESHOLD,
         "avg_inference": f"{AVG_INFERENCE_MS:.0f} ms" if INFERENCE_COUNT else "Henüz yok",
-        "database": "Supabase PostgreSQL",
+        "database": database_name(),
     }
 
 
@@ -1087,7 +1087,7 @@ def ensure_history_user_column() -> None:
 async def startup_event():
     Base.metadata.create_all(bind=engine)
     ensure_history_user_column()
-    logger.info("[DB] Tables ready")
+    logger.info("[DB] Tables ready (%s)", database_name())
 
     db = next(get_db())
     try:
