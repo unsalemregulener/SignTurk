@@ -51,6 +51,12 @@ class Live226:
         self.ensemble = None
         self.extractor = None
         self.frame_ms = deque(maxlen=200)
+        self.detect_ms = deque(maxlen=200)
+        self.pose_ms = deque(maxlen=200)
+
+    @staticmethod
+    def _average(values):
+        return round(float(np.mean(values)), 1) if values else None
 
     @property
     def ready(self) -> bool:
@@ -66,8 +72,15 @@ class Live226:
             "num_classes": len(self.vocabulary),
             "frame_count": self.frame_count,
             "detect_every": self.detect_every,
-            "avg_frame_ms": round(float(np.mean(self.frame_ms)), 1) if self.frame_ms else None,
+            "avg_frame_ms": self._average(self.frame_ms),
+            "avg_detect_ms": self._average(self.detect_ms),
+            "avg_pose_ms": self._average(self.pose_ms),
         }
+
+    def reset_timings(self) -> None:
+        self.frame_ms.clear()
+        self.detect_ms.clear()
+        self.pose_ms.clear()
 
     def start_loading(self) -> None:
         """Load the models in a background thread so the server starts at once."""
@@ -105,6 +118,10 @@ class Live226:
         started = time.perf_counter()
         result = self.extractor(frame_rgb, boxes)
         self.frame_ms.append((time.perf_counter() - started) * 1000.0)
+        detect_ms = getattr(self.extractor, "last_detect_ms", 0.0)
+        if detect_ms:
+            self.detect_ms.append(detect_ms)
+        self.pose_ms.append(getattr(self.extractor, "last_pose_ms", 0.0))
         return result
 
     def predict(self, clip: list) -> dict:

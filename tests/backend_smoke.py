@@ -284,6 +284,8 @@ with TestClient(backend.app) as client:
     check("226 model ready", status["ready"], status)
     if status["ready"]:
         clip = camera_clip(ROOT / "docs" / "videos" / "cay.mp4")
+        default_every = backend.LIVE226.detect_every
+        backend.LIVE226.reset_timings()
         with live_socket(client, "/api/predict/live226", user_token) as ws:
             ws.send_text(json.dumps({"action": "start"}))
             check("226 recording starts", ws.receive_json().get("type") == "recording")
@@ -296,9 +298,11 @@ with TestClient(backend.app) as client:
             result = ws.receive_json()
             elapsed = time.time() - started
             top = result.get("top", [])
-            print(f"     226 on the cay clip: {[(row['gloss'], row['confidence']) for row in top]}"
-                  f" | {elapsed:.1f}s for {len(clip)} frames, model {result.get('model_ms')} ms,"
-                  f" feedback {result.get('feedback')!r}")
+            timing = client.get("/api/health").json()["model_226"]
+            print(f"     226 on the cay clip, detection every {default_every} frame(s): "
+                  f"{[(row['gloss'], row['confidence']) for row in top]} | {elapsed:.1f}s for {len(clip)} frames, "
+                  f"detect {timing['avg_detect_ms']} ms, pose {timing['avg_pose_ms']} ms per frame, "
+                  f"model {result.get('model_ms')} ms, feedback {result.get('feedback')!r}")
             check("226 processes every frame", processed == len(clip) == result.get("frames"), (processed, result))
             check("226 returns three candidates with Turkish spelling",
                   len(top) == 3 and all(row["text_tr"] == restore_turkish(row["gloss"]) for row in top), result)
@@ -309,7 +313,27 @@ with TestClient(backend.app) as client:
         rows = client.get("/api/history", headers=U).json()
         check("226 approval stored as Live226 with its confidence",
               rows[0]["mode"] == "Live226" and rows[0]["confidence"].endswith("%"), rows[:1])
-        print("     226 extraction:", client.get("/api/health").json()["model_226"].get("avg_frame_ms"), "ms per frame")
+
+        # The same clip with the other person-detection setting, for comparison
+        other_every = 4 if default_every == 1 else 1
+        backend.LIVE226.reset_timings()
+        backend.LIVE226.detect_every = other_every
+        with live_socket(client, "/api/predict/live226", user_token) as ws:
+            ws.send_text(json.dumps({"action": "start"}))
+            ws.receive_json()
+            started = time.time()
+            for frame in clip:
+                ws.send_text(json.dumps({"image": frame}))
+                ws.receive_json()
+            ws.send_text(json.dumps({"action": "end"}))
+            other = ws.receive_json()
+            other_elapsed = time.time() - started
+        backend.LIVE226.detect_every = default_every
+        timing = client.get("/api/health").json()["model_226"]
+        print(f"     226 on the cay clip, detection every {other_every} frame(s): "
+              f"{[(row['gloss'], row['confidence']) for row in other.get('top', [])]} | {other_elapsed:.1f}s, "
+              f"detect {timing['avg_detect_ms']} ms, pose {timing['avg_pose_ms']} ms per frame")
+        check("226 also works with the other detection setting", len(other.get("top", [])) == 3, other)
 
     client.post("/api/logout", headers=U)
     check("token revoked after logout", client.get("/api/history", headers=U).status_code == 401)
