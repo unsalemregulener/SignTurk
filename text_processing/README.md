@@ -52,10 +52,11 @@ python -m unittest discover -s tests -v
 python -m text_processing.eval --check --min-exact 0.98   # rule-based floor
 ```
 
-To try the API without TensorFlow, MediaPipe or a camera:
+To try the engine or the API without TensorFlow, MediaPipe or a camera:
 
 ```bash
-python -m text_processing.devserver   # http://127.0.0.1:8000/docs
+python -m text_processing.demo --words "ben çay içmek"   # Ben çay içiyorum.
+python -m text_processing.devserver                      # http://127.0.0.1:8000/docs
 ```
 
 ## Known limitations
