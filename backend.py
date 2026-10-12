@@ -30,6 +30,11 @@ from sqlalchemy.orm import Session
 
 from database import engine, get_db, Base, database_name
 import models
+from live_pipeline import (
+    count_detected_hands as count_live_hands,
+    preprocess_sequence as preprocess_live_sequence,
+    resample_window,
+)
 
 # ── Landmark smoothing ───────────────────────────────────
 try:
@@ -89,7 +94,8 @@ NORM_STD     = None
 DEMO_CONFIG  = {}
 MP_HANDS     = None
 
-SEQ_LEN      = 16
+SEQ_LEN      = 16   # model input length (frames)
+CAPTURE_WINDOW = 32 # frames collected from the camera, resampled to SEQ_LEN
 FEAT_DIM     = 156
 NUM_CLASSES  = 179
 CONFIDENCE_THRESHOLD = 0.40
@@ -102,7 +108,7 @@ MEDIAPIPE_DETECTION_CONFIDENCE = 0.15
 MEDIAPIPE_TRACKING_CONFIDENCE = 0.15
 MEDIAPIPE_STATIC_IMAGE_MODE = False
 MEDIAPIPE_MODEL_COMPLEXITY = 1
-MAX_MISSED_HAND_FRAMES = 6
+MAX_MISSED_HAND_FRAMES = 8
 LIVE_BUFFER_STRIDE = 0
 
 # Per-word landmark sequences that drive the 3D avatar
@@ -215,7 +221,7 @@ def init_mediapipe():
 def load_model_assets():
     """Load the 179-class live model and its preprocessing assets."""
     global MODEL, LABEL_MAP, NORM_MEAN, NORM_STD, DEMO_CONFIG, MP_HANDS
-    global SEQ_LEN, FEAT_DIM, NUM_CLASSES, CONFIDENCE_THRESHOLD, MODEL_LOAD_TIME
+    global SEQ_LEN, CAPTURE_WINDOW, FEAT_DIM, NUM_CLASSES, CONFIDENCE_THRESHOLD, MODEL_LOAD_TIME
 
     t0 = time.time()
 
@@ -224,10 +230,11 @@ def load_model_assets():
         with open(cfg_path, encoding="utf-8") as f:
             DEMO_CONFIG = json.load(f)
         SEQ_LEN              = DEMO_CONFIG.get("seq_len", 16)
+        CAPTURE_WINDOW       = DEMO_CONFIG.get("capture_window", 32)
         FEAT_DIM             = DEMO_CONFIG.get("feat_dim", 156)
         NUM_CLASSES          = DEMO_CONFIG.get("num_classes", 179)
         CONFIDENCE_THRESHOLD = DEMO_CONFIG.get("confidence_threshold", 0.40)
-        logger.info(f"[CONFIG] seq_len={SEQ_LEN} feat_dim={FEAT_DIM} num_classes={NUM_CLASSES}")
+        logger.info(f"[CONFIG] seq_len={SEQ_LEN} capture_window={CAPTURE_WINDOW} feat_dim={FEAT_DIM} num_classes={NUM_CLASSES}")
 
     lm_path = MODEL_DIR / "label_map.json"
     if lm_path.exists():
@@ -315,61 +322,13 @@ def extract_landmarks_from_frame(frame: np.ndarray, mirror: bool = False) -> Opt
         return np.zeros(126, dtype=np.float32)
 
 
-def hand_is_present(hand_vec: np.ndarray) -> bool:
-    return bool(np.linalg.norm(hand_vec) > MIN_HAND_NORM)
-
-
 def count_detected_hands(landmarks: np.ndarray) -> int:
-    if landmarks is None or landmarks.shape != (126,):
-        return 0
-    return int(hand_is_present(landmarks[:63])) + int(hand_is_present(landmarks[63:]))
-
-
-def normalize_hands_relative(X):
-    result = X.copy()
-    T = result.shape[0]
-    for start in [0, 63]:
-        hand = result[:, start:start+63].reshape(T, 21, 3)
-        hand_rel = hand - hand[:, 0:1, :]
-        scale = np.linalg.norm(hand_rel[:, 9, :], axis=-1, keepdims=True)[:, :, np.newaxis]
-        scale = np.where(scale < 1e-6, 1.0, scale)
-        result[:, start:start+63] = (hand_rel / scale).reshape(T, 63)
-    return result
-
-
-def compute_finger_angles(X):
-    T = X.shape[0]
-    chains = [[1,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,16],[17,18,19,20]]
-    angles_all = []
-    for hs in [0, 63]:
-        hand = X[:, hs:hs+63].reshape(T, 21, 3)
-        ha = np.zeros((T, 15), dtype=np.float32)
-        idx = 0
-        for chain in chains:
-            for i in range(len(chain) - 1):
-                a = hand[:, (0 if i == 0 else chain[i-1]), :]
-                b = hand[:, chain[i], :]
-                c = hand[:, chain[i+1], :]
-                v1, v2 = a - b, c - b
-                cos_a = np.sum(v1*v2, axis=-1) / (
-                    np.linalg.norm(v1, axis=-1) * np.linalg.norm(v2, axis=-1) + 1e-8)
-                ha[:, idx] = np.arccos(np.clip(cos_a, -1, 1))
-                idx += 1
-        angles_all.append(ha)
-    return np.concatenate([X, np.concatenate(angles_all, axis=-1)], axis=-1)
-
-
-def zscore_normalize(X):
-    if NORM_MEAN is None or NORM_STD is None:
-        return X
-    return (X - NORM_MEAN) / NORM_STD
+    return count_live_hands(landmarks, MIN_HAND_NORM)
 
 
 def preprocess_sequence(raw_landmarks):
-    x = normalize_hands_relative(raw_landmarks)
-    x = compute_finger_angles(x)
-    x = zscore_normalize(x)
-    return x[np.newaxis, :, :].astype(np.float32)
+    """Resample a capture window to the model length and build the features."""
+    return preprocess_live_sequence(resample_window(raw_landmarks, SEQ_LEN), NORM_MEAN, NORM_STD)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -631,6 +590,7 @@ async def health():
         "landmark_count": len(LANDMARK_INDEX),
         "database": database_name(),
         "seq_len": SEQ_LEN,
+        "capture_window": CAPTURE_WINDOW,
         "feat_dim": FEAT_DIM,
         "num_classes": NUM_CLASSES,
         "confidence_threshold": CONFIDENCE_THRESHOLD,
@@ -739,7 +699,7 @@ async def live_predict(websocket: WebSocket):
     logger.info("[WS-LIVE] Connected")
     db = next(get_db())
     add_log_db(db, "Info", "Canlı akış bağlandı", user_email)
-    buf = FrameBuffer(seq_len=SEQ_LEN)
+    buf = FrameBuffer(seq_len=CAPTURE_WINDOW)
     missed_hand_frames = 0
     # A prediction only becomes part of the sentence (and of History) after
     # the user approves it. last_candidate holds the latest confident
@@ -854,9 +814,9 @@ async def live_predict(websocket: WebSocket):
             sequence = buf.add(landmarks)
             if sequence is None:
                 await websocket.send_json({"class_id": -1,
-                    "label_tr": f"Kare toplanıyor ({len(buf)}/{SEQ_LEN})",
+                    "label_tr": f"Kare toplanıyor ({len(buf)}/{CAPTURE_WINDOW})",
                     "label_en": "Collecting...",
-                    "confidence": len(buf)/SEQ_LEN,
+                    "confidence": len(buf)/CAPTURE_WINDOW,
                     "animation_key": "none",
                     "category": "-",
                     "hands_detected": hands_detected,
@@ -913,9 +873,9 @@ async def live_predict(websocket: WebSocket):
 async def predict_sequence(payload: Dict[str, Any], _user=Depends(current_user)):
     try:
         raw = np.array(payload["landmarks"], dtype=np.float32)
-        if raw.shape != (SEQ_LEN, 126):
+        if raw.ndim != 2 or raw.shape[1] != 126 or raw.shape[0] not in (SEQ_LEN, CAPTURE_WINDOW):
             return JSONResponse(status_code=400,
-                content={"error": f"Beklenen ({SEQ_LEN}, 126), gelen {list(raw.shape)}"})
+                content={"error": f"Beklenen ({SEQ_LEN} veya {CAPTURE_WINDOW}, 126), gelen {list(raw.shape)}"})
         result = run_best_inference(raw)
         if result is None:
             return JSONResponse(status_code=503, content={"error": "Model yüklenmedi"})
@@ -943,6 +903,9 @@ def _model_status() -> Dict[str, Any]:
         "model_loaded": MODEL is not None,
         "live_model": "Yüklü" if MODEL else "Yüklenmedi",
         "num_classes": NUM_CLASSES,
+        "seq_len": SEQ_LEN,
+        "capture_window": CAPTURE_WINDOW,
+        "feat_dim": FEAT_DIM,
         "label_map_size": len(LABEL_MAP),
         "landmark_words": len(LANDMARK_INDEX),
         "mediapipe_ready": MP_HANDS is not None,

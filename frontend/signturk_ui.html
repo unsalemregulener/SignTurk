@@ -599,6 +599,9 @@ const API = {
 };
 window.SIGNTURK_API = API;
 
+// About 10 frames per second: a 32-frame window covers roughly 3 seconds of signing.
+const SEND_INTERVAL_MS = 100;
+
 const routes = [
   {id:"dashboard", label:"Panel", icon:"Home"},
   {id:"live", label:"Canlı Çeviri", icon:"Camera"},
@@ -713,7 +716,7 @@ function AuthScreen({onLogin}){
             <h1>SIGNTURK</h1>
             <p>Türk İşaret Dili için canlı tanıma, kayıtlı geçmiş, sözlük ve 3D animasyon yönetimi tek panelde.</p>
             <div className="auth-stats">
-              <div className="auth-stat"><strong>16</strong><span>frame pencere</span></div>
+              <div className="auth-stat"><strong>32</strong><span>kare pencere</span></div>
               <div className="auth-stat"><strong>179</strong><span>model sınıfı</span></div>
               <div className="auth-stat"><strong>156</strong><span>özellik boyutu</span></div>
             </div>
@@ -780,7 +783,7 @@ function Shell({user, setUser}){
   }[active] || <Dashboard navigate={navigate} health={health}/>;
   const title = {
     dashboard:["Panel","Sistem, model ve son kayıtlar"],
-    live:["Canlı Çeviri","Kamera akışı ile 16-frame tahmin"],
+    live:["Canlı Çeviri","Kamera akışı ile 32 karelik pencere"],
     dictionary:["Sözlük","Model etiketleri ve Türkçe karşılıklar"],
     avatar3d:["3D Animasyon","Kayıtlı işaret animasyonları"],
     history:["Geçmiş","Başarılı canlı tahmin kayıtları"],
@@ -816,7 +819,7 @@ function Shell({user, setUser}){
           <div className="top-actions">
             <StatusChip ok={health?.model_loaded}>Model</StatusChip>
             <StatusChip ok={health?.mediapipe_ready}>MediaPipe</StatusChip>
-            <span className="chip"><Icon name="Layers" size={14}/> {health?.seq_len || 16} frame</span>
+            <span className="chip"><Icon name="Layers" size={14}/> {health?.capture_window || 32} kare</span>
           </div>
         </header>
         <div className="content">{page}</div>
@@ -850,7 +853,7 @@ function Dashboard({navigate, health}){
       <div className="grid cols-4">
         <Metric label="Model" value={health?.model_loaded ? "Hazır" : "Bekliyor"} sub={`${health?.num_classes || 179} sınıf`} icon="Cpu" ok={health?.model_loaded}/>
         <Metric label="MediaPipe" value={health?.mediapipe_ready ? "Aktif" : "Kapalı"} sub={`Eşik ${health?.mediapipe_detection_threshold ?? 0.15}`} icon="Activity" ok={health?.mediapipe_ready}/>
-        <Metric label="Pencere" value={`${health?.seq_len || 16}`} sub={`${health?.feat_dim || 156} özellik`} icon="Layers" ok/>
+        <Metric label="Pencere" value={`${health?.capture_window || 32} kare`} sub={`model girdisi ${health?.seq_len || 16} × ${health?.feat_dim || 156}`} icon="Layers" ok/>
         <Metric label="Güven" value={percent(health?.confidence_threshold ?? .4)} sub="yayın eşiği" icon="Gauge" ok/>
       </div>
       <div className="grid cols-2">
@@ -858,7 +861,7 @@ function Dashboard({navigate, health}){
           <div className="panel-head"><div><h3>Canlı Çeviri</h3><span>WebSocket kamera akışı</span></div><button className="btn primary" onClick={() => navigate("live")}><Icon name="Play"/> Başlat</button></div>
           <div className="panel-body">
             <div className="grid cols-3">
-              <Metric label="Akış" value="16 frame" sub="tahmin penceresi" icon="Radio" ok/>
+              <Metric label="Akış" value="~10 kare/sn" sub="kamera gönderimi" icon="Radio" ok/>
               <Metric label="Onaylanan" value={summary ? String(summary.translations) : "-"} sub="kelime" icon="Database" ok/>
               <Metric label="Ortalama güven" value={summary?.translations ? `${summary.avg_confidence}%` : "-"} sub="onaylanan kelimeler" icon="Gauge" ok/>
             </div>
@@ -903,7 +906,8 @@ function LivePage(){
   const [sentenceWords, setSentenceWords] = useState([]);
   const [sentence, setSentence] = useState("");
   const [health] = useHealth(false);
-  const seqLen = health?.seq_len || 16;
+  // Frames collected before each prediction; the server resamples them to the model length
+  const windowLen = health?.capture_window || 32;
   const speechRateRef = useRef(1);
   useEffect(() => {
     apiFetch(API.endpoints.settings).then(s => {
@@ -972,7 +976,7 @@ function LivePage(){
       inFlightRef.current = true;
       ws.send(JSON.stringify({image, mirror:false, ts:Date.now()}));
       scheduleSend();
-    }, 70);
+    }, SEND_INTERVAL_MS);
   }, [captureFrame]);
 
   const speak = useCallback((text) => {
@@ -1095,7 +1099,7 @@ function LivePage(){
   }, [deviceId, loadDevices, scheduleSend, commitPrediction, stopLive, starting, speak]);
 
   const bufferLen = streamMeta?.buffer_length || 0;
-  const bufferPct = Math.max(0, Math.min(100, Math.round((bufferLen / seqLen) * 100)));
+  const bufferPct = Math.max(0, Math.min(100, Math.round((bufferLen / windowLen) * 100)));
   const hasPrediction = prediction && prediction.class_id !== -1;
   const confPct = hasPrediction ? Math.round(Number(prediction?.confidence || 0) * 100) : 0;
   const displayLabel = hasPrediction ? prediction.label_tr : (running ? "Toplanıyor" : "Hazır");
@@ -1110,7 +1114,7 @@ function LivePage(){
           <strong>SIGNTURK Kamera</strong>
           <div className="camera-meta">
             <span className={`dark-chip ${running ? "ok" : ""}`}><Icon name={running ? "Wifi" : "WifiOff"} size={14}/> {running ? "Açık" : "Kapalı"}</span>
-            <span className="dark-chip"><Icon name="Layers" size={14}/> {bufferLen}/{seqLen}</span>
+            <span className="dark-chip"><Icon name="Layers" size={14}/> {bufferLen}/{windowLen}</span>
             <span className={`dark-chip ${(streamMeta?.hands_detected || 0) > 0 ? "ok" : "warn"}`}><Icon name="Hand" size={14}/> {streamMeta?.hands_detected ?? 0} el</span>
           </div>
         </div>
@@ -1201,7 +1205,7 @@ function LivePage(){
                   </div>
                 ))}
               </div>
-            ) : <div className="empty">16 frame tamamlanınca liste güncellenir.</div>}
+            ) : <div className="empty">{windowLen} kare tamamlanınca liste güncellenir.</div>}
           </div>
         </section>
         <section className="panel">
@@ -1416,6 +1420,8 @@ function AdminModel(){
     ["Canlı model", m.live_model || "-"],
     ["Animasyon kelimesi", m.landmark_words ?? "-"],
     ["Sınıf sayısı", m.num_classes ?? "-"],
+    ["Model girdisi", m.seq_len ? `${m.seq_len} × ${m.feat_dim}` : "-"],
+    ["Yakalama penceresi", m.capture_window ? `${m.capture_window} kare` : "-"],
     ["Label map", m.label_map_size ?? "-"],
     ["Ortalama inference", m.avg_inference ?? "-"],
     ["Güven eşiği", m.confidence_threshold ?? "-"]

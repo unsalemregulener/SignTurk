@@ -1,5 +1,6 @@
 {
   "seq_len": 16,
+  "capture_window": 32,
   "feat_dim": 156,
   "num_classes": 179,
   "preprocessing": "color_only + relative_coords + finger_angles + zscore",
