@@ -138,7 +138,7 @@ text_processing/       Turkish sentence engine
 frontend/              interface (React from a CDN), avatar page, three.js r128, avatar.glb
 landmarks/             226 landmark sequences for the avatar
 demo_assets_179/       model metadata; the weights are downloaded
-tools/                 download_models.py
+tools/                 download_models.py, extract_landmarks.py (avatar files from AUTSL)
 tests/                 unit tests and the end-to-end check (backend_smoke.py)
 ```
 
@@ -173,9 +173,9 @@ input pipeline; it says nothing about accuracy on new signers.
   several workers do not share sessions.
 - History rows written by versions without per-user history have no owner.
   They count in the admin overview but appear in no user's history.
-- The script that extracted, scored and smoothed the landmark files is not
-  included. Each file records its source video (`source_video`) and a
-  `quality_score`.
+- `tools/extract_landmarks.py` regenerates the avatar files from the AUTSL
+  training videos. The shipped files also carry a `quality_score` from a later
+  review step that is not included; nothing in the code reads it.
 
 ## Data
 
