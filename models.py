@@ -20,6 +20,8 @@ class History(Base):
     __tablename__ = "history"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    # Added after the first release; existing databases get the column at startup.
+    user_id = Column(Integer, index=True, nullable=True)
     session_id = Column(String(20), nullable=False)
     mode = Column(String(50), default="Live")
     result = Column(String(255), nullable=False)
@@ -37,15 +39,10 @@ class Log(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
-class Setting(Base):
-    __tablename__ = "settings"
+class UserSetting(Base):
+    __tablename__ = "user_settings"
 
-    id = Column(Integer, primary_key=True, default=1)
-    camera = Column(String(100), default="Default Camera")
-    voice = Column(String(100), default="Female Voice")
+    user_id = Column(Integer, primary_key=True)
+    tts_enabled = Column(Boolean, default=False)
     speech_rate = Column(Float, default=1.0)
     avatar_speed = Column(Float, default=1.0)
-    tts_enabled = Column(Boolean, default=True)
-    notifications_enabled = Column(Boolean, default=True)
-    avatar_enabled = Column(Boolean, default=True)
-    websocket_enabled = Column(Boolean, default=True)

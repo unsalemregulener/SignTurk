@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SIGNTURK</title>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.9/babel.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/lucide@1.21.0/dist/umd/lucide.min.js" crossorigin="anonymous"></script>
   <style>
     :root{
       --bg:#f5f7fb;
@@ -581,9 +581,12 @@ const API = {
   endpoints: {
     health: "/api/health",
     login: "/api/login",
+    logout: "/api/logout",
     register: "/api/register",
     live: "/api/predict/live",
     history: "/api/history",
+    summary: "/api/me/summary",
+    modelStatus: "/api/model/status",
     dictionary: "/api/dictionary",
     settings: "/api/settings",
     adminOverview: "/api/admin/overview",
@@ -632,14 +635,33 @@ function initials(user){
   return source.split(/[\s@.]+/).filter(Boolean).slice(0,2).map(x => x[0]?.toUpperCase()).join("") || "ST";
 }
 
+const STORAGE_KEY = "signturk_user";
+
+function storedToken(){
+  try{ return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null")?.access_token || ""; }
+  catch{ return ""; }
+}
+
+function errorMessage(data){
+  if (typeof data?.detail === "string") return data.detail;
+  if (Array.isArray(data?.detail) && data.detail[0]?.msg) return data.detail[0].msg;
+  return data?.error || "İstek başarısız";
+}
+
 async function apiFetch(path, options={}){
+  const token = storedToken();
   const res = await fetch(API.baseUrl + path, {
     ...options,
-    headers: {"Content-Type":"application/json", ...(options.headers || {})}
+    headers: {
+      "Content-Type":"application/json",
+      ...(token ? {Authorization:`Bearer ${token}`} : {}),
+      ...(options.headers || {})
+    }
   });
+  if (res.status === 401 && token) window.dispatchEvent(new Event("signturk:logout"));
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new Error(data?.detail || data?.error || "İstek başarısız");
+  if (!res.ok) throw new Error(errorMessage(data));
   return data;
 }
 
@@ -673,7 +695,7 @@ function AuthScreen({onLogin}){
     try{
       if (mode === "login"){
         const data = await apiFetch(API.endpoints.login, {method:"POST", body:JSON.stringify({email:form.email, password:form.password})});
-        onLogin(data.user || data);
+        onLogin({...data.user, access_token:data.access_token});
       }else{
         await apiFetch(API.endpoints.register, {method:"POST", body:JSON.stringify(form)});
         setOk("Kayıt alındı. Şimdi giriş yapabilirsiniz.");
@@ -818,15 +840,15 @@ function Metric({label, value, sub, icon, ok}){
 
 function Dashboard({navigate, health}){
   const [history, setHistory] = useState([]);
-  const [model, setModel] = useState(null);
+  const [summary, setSummary] = useState(null);
   useEffect(() => {
-    fetch(API.baseUrl + API.endpoints.history).then(r => r.json()).then(d => setHistory(Array.isArray(d) ? d.slice(0,6) : [])).catch(() => {});
-    fetch(API.baseUrl + API.endpoints.adminModel).then(r => r.json()).then(setModel).catch(() => {});
+    apiFetch(API.endpoints.history).then(d => setHistory(Array.isArray(d) ? d.slice(0,6) : [])).catch(() => {});
+    apiFetch(API.endpoints.summary).then(setSummary).catch(() => {});
   }, []);
   return (
     <div className="grid" style={{gap:16}}>
       <div className="grid cols-4">
-        <Metric label="Model" value={health?.model_loaded ? "Hazır" : "Bekliyor"} sub={`${health?.num_classes || model?.num_classes || 179} sınıf`} icon="Cpu" ok={health?.model_loaded}/>
+        <Metric label="Model" value={health?.model_loaded ? "Hazır" : "Bekliyor"} sub={`${health?.num_classes || 179} sınıf`} icon="Cpu" ok={health?.model_loaded}/>
         <Metric label="MediaPipe" value={health?.mediapipe_ready ? "Aktif" : "Kapalı"} sub={`Eşik ${health?.mediapipe_detection_threshold ?? 0.15}`} icon="Activity" ok={health?.mediapipe_ready}/>
         <Metric label="Pencere" value={`${health?.seq_len || 16}`} sub={`${health?.feat_dim || 156} özellik`} icon="Layers" ok/>
         <Metric label="Güven" value={percent(health?.confidence_threshold ?? .4)} sub="yayın eşiği" icon="Gauge" ok/>
@@ -837,17 +859,17 @@ function Dashboard({navigate, health}){
           <div className="panel-body">
             <div className="grid cols-3">
               <Metric label="Akış" value="16 frame" sub="tahmin penceresi" icon="Radio" ok/>
-              <Metric label="Kamera" value="420px" sub="sabit gönderim" icon="Video" ok/>
-              <Metric label="Kayıt" value="Geçmiş" sub="güvenli sonuçlar" icon="Database" ok/>
+              <Metric label="Onaylanan" value={summary ? String(summary.translations) : "-"} sub="kelime" icon="Database" ok/>
+              <Metric label="Ortalama güven" value={summary?.translations ? `${summary.avg_confidence}%` : "-"} sub="onaylanan kelimeler" icon="Gauge" ok/>
             </div>
           </div>
         </section>
         <section className="panel">
-          <div className="panel-head"><div><h3>Son Tahminler</h3><span>Veritabanı kayıtları</span></div><button className="btn small" onClick={() => navigate("history")}><Icon name="History" size={15}/> Aç</button></div>
+          <div className="panel-head"><div><h3>Son Onaylanan Kelimeler</h3><span>Geçmiş kayıtları</span></div><button className="btn small" onClick={() => navigate("history")}><Icon name="History" size={15}/> Aç</button></div>
           <div className="panel-body">
             {history.length === 0 ? <div className="empty">Henüz kayıt yok.</div> : (
               <div className="transcript">
-                {history.map((h,i) => <div className="transcript-item" key={h.id || i}><strong>{h.result || h.label_tr || "-"}</strong><span className="chip">{h.confidence || "-"}</span></div>)}
+                {history.map((h,i) => <div className="transcript-item" key={h.id ?? i}><strong>{h.result || "-"}</strong><span className="chip">{h.confidence || "-"}</span></div>)}
               </div>
             )}
           </div>
@@ -882,6 +904,13 @@ function LivePage(){
   const [sentence, setSentence] = useState("");
   const [health] = useHealth(false);
   const seqLen = health?.seq_len || 16;
+  const speechRateRef = useRef(1);
+  useEffect(() => {
+    apiFetch(API.endpoints.settings).then(s => {
+      setSpeech(!!s?.tts_enabled);
+      speechRateRef.current = Number(s?.speech_rate) || 1;
+    }).catch(() => {});
+  }, []);
 
   const loadDevices = useCallback(async () => {
     try{
@@ -950,7 +979,7 @@ function LivePage(){
     if (!speech || !text || !window.speechSynthesis) return;
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = "tr-TR";
-    utter.rate = 1;
+    utter.rate = speechRateRef.current;
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utter);
   }, [speech]);
@@ -991,8 +1020,7 @@ function LivePage(){
     if (lastCommitRef.current.label === clean && now - lastCommitRef.current.at < 1800) return;
     lastCommitRef.current = {label:clean, at:now};
     setRecent(prev => [{label:clean, conf:data.confidence, at:new Date().toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}, ...prev].slice(0,10));
-    speak(clean);
-  }, [speak]);
+  }, []);
 
   const startLive = useCallback(async () => {
     setStarting(true);
@@ -1016,7 +1044,7 @@ function LivePage(){
         await videoRef.current.play();
       }
       await loadDevices();
-      const ws = new WebSocket(API.wsUrl + API.endpoints.live);
+      const ws = new WebSocket(`${API.wsUrl}${API.endpoints.live}?token=${encodeURIComponent(storedToken())}`);
       wsRef.current = ws;
       ws.onopen = () => {
         inFlightRef.current = false;
@@ -1035,6 +1063,8 @@ function LivePage(){
             setSentence(data.sentence || "");
             setPending(null);
             setStatus("Cümle güncellendi");
+            // Only approved words are spoken: the sentence once it has two words, otherwise the word.
+            if (data.added) speak(data.sentence || data.added);
             return;
           }
           if (data.type === "rejected"){
@@ -1050,14 +1080,19 @@ function LivePage(){
         }
       };
       ws.onerror = () => { inFlightRef.current = false; setError("WebSocket bağlantısı kurulamadı."); setStatus("Bağlantı hatası"); };
-      ws.onclose = () => { inFlightRef.current = false; setRunning(false); if (!starting) setStatus("Bağlantı kapandı"); };
+      ws.onclose = (event) => {
+        inFlightRef.current = false;
+        setRunning(false);
+        if (event.code === 1008){ setError("Oturum süresi doldu, yeniden giriş yapın."); window.dispatchEvent(new Event("signturk:logout")); }
+        else if (!starting) setStatus("Bağlantı kapandı");
+      };
     }catch(err){
       setError(err.message || "Kamera açılamadı");
       stopLive();
     }finally{
       setStarting(false);
     }
-  }, [deviceId, loadDevices, scheduleSend, commitPrediction, stopLive, starting]);
+  }, [deviceId, loadDevices, scheduleSend, commitPrediction, stopLive, starting, speak]);
 
   const bufferLen = streamMeta?.buffer_length || 0;
   const bufferPct = Math.max(0, Math.min(100, Math.round((bufferLen / seqLen) * 100)));
@@ -1187,7 +1222,7 @@ function DictionaryPage(){
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState("");
   useEffect(() => {
-    fetch(API.baseUrl + API.endpoints.dictionary).then(r => r.json()).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => setRows([]));
+    apiFetch(API.endpoints.dictionary).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => setRows([]));
   }, []);
   const filtered = rows.filter(r => `${r.tr || r.TR || ""} ${r.en || r.EN || ""} ${r.class_id || ""}`.toLowerCase().includes(search.toLowerCase()));
   return (
@@ -1206,15 +1241,15 @@ function HistoryPage(){
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    fetch(API.baseUrl + API.endpoints.history).then(r => r.json()).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => setRows([])).finally(() => setLoading(false));
+    apiFetch(API.endpoints.history).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => setRows([])).finally(() => setLoading(false));
   }, []);
   return (
     <section className="panel">
-      <div className="panel-head"><div><h3>Geçmiş</h3><span>{rows.length} kayıt</span></div></div>
+      <div className="panel-head"><div><h3>Geçmiş</h3><span>{rows.length} onaylanan kelime</span></div></div>
       {loading ? <div className="empty">Yükleniyor.</div> : rows.length === 0 ? <div className="empty">Kayıt bulunamadı.</div> : (
         <div className="table-wrap">
           <table><thead><tr><th>Zaman</th><th>Mod</th><th>Sonuç</th><th>Güven</th><th>Oturum</th></tr></thead>
-            <tbody>{rows.map((r,i) => <tr key={r.id || i}><td>{r.created_at ? new Date(r.created_at).toLocaleString("tr-TR") : "-"}</td><td>{r.mode || "-"}</td><td>{r.result || "-"}</td><td>{r.confidence || "-"}</td><td className="mono">{r.session_id || "-"}</td></tr>)}</tbody>
+            <tbody>{rows.map((r,i) => <tr key={r.id ?? i}><td>{r.created_at ? new Date(r.created_at).toLocaleString("tr-TR") : "-"}</td><td>{r.mode || "-"}</td><td>{r.result || "-"}</td><td>{r.confidence || "-"}</td><td className="mono">{r.session_id || "-"}</td></tr>)}</tbody>
           </table>
         </div>
       )}
@@ -1223,16 +1258,19 @@ function HistoryPage(){
 }
 
 function SettingsPage(){
-  const [settings, setSettings] = useState({camera:"Varsayılan", voice:"Türkçe", speech_rate:1, avatar_speed:1, tts_enabled:false, notifications_enabled:true, avatar_enabled:true, websocket_enabled:true});
+  const [settings, setSettings] = useState({tts_enabled:false, speech_rate:1, avatar_speed:1});
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
   useEffect(() => {
-    fetch(API.baseUrl + API.endpoints.settings).then(r => r.json()).then(d => setSettings(prev => ({...prev, ...d}))).catch(() => {});
+    apiFetch(API.endpoints.settings).then(d => setSettings(prev => ({...prev, ...d}))).catch(() => {});
   }, []);
   const save = async () => {
-    setSaved(false);
-    await apiFetch(API.endpoints.settings, {method:"POST", body:JSON.stringify(settings)});
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1800);
+    setSaved(false); setError("");
+    try{
+      await apiFetch(API.endpoints.settings, {method:"POST", body:JSON.stringify(settings)});
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1800);
+    }catch(err){ setError(err.message || "Ayarlar kaydedilemedi"); }
   };
   const ToggleRow = ({k,title,sub}) => (
     <div className="settings-row">
@@ -1246,19 +1284,15 @@ function SettingsPage(){
         <div className="panel-head"><div><h3>Tercihler</h3><span>SIGNTURK panel ayarları</span></div><button className="btn primary" onClick={save}><Icon name="Save"/> Kaydet</button></div>
         <div className="panel-body">
           {saved && <div className="alert ok">Ayarlar kaydedildi.</div>}
-          <ToggleRow k="tts_enabled" title="Sesli okuma" sub="Tahminleri Türkçe seslendirir" />
-          <ToggleRow k="notifications_enabled" title="Bildirimler" sub="Panel içi durum bildirimleri" />
-          <ToggleRow k="avatar_enabled" title="3D animasyon" sub="Animasyon modülünü etkin tutar" />
-          <ToggleRow k="websocket_enabled" title="WebSocket" sub="Canlı kamera tahmin akışı" />
+          {error && <div className="alert bad">{error}</div>}
+          <ToggleRow k="tts_enabled" title="Sesli okuma" sub="Onaylanan kelimeleri ve cümleyi tarayıcının Türkçe sesiyle okur" />
         </div>
       </section>
       <section className="panel">
         <div className="panel-head"><div><h3>İnce Ayar</h3><span>Kullanıcı deneyimi</span></div></div>
         <div className="panel-body grid" style={{gap:14}}>
-          <div className="field"><label>Kamera adı</label><input className="input" value={settings.camera || ""} onChange={e => setSettings({...settings, camera:e.target.value})} /></div>
-          <div className="field"><label>Ses</label><input className="input" value={settings.voice || ""} onChange={e => setSettings({...settings, voice:e.target.value})} /></div>
           <div className="field"><label>Konuşma hızı</label><input className="input" type="number" step="0.1" min="0.5" max="2" value={settings.speech_rate || 1} onChange={e => setSettings({...settings, speech_rate:Number(e.target.value)})} /></div>
-          <div className="field"><label>Avatar hızı</label><input className="input" type="number" step="0.1" min="0.5" max="2" value={settings.avatar_speed || 1} onChange={e => setSettings({...settings, avatar_speed:Number(e.target.value)})} /></div>
+          <div className="field"><label>Avatar hızı</label><input className="input" type="number" step="0.1" min="0.25" max="3" value={settings.avatar_speed || 1} onChange={e => setSettings({...settings, avatar_speed:Number(e.target.value)})} /></div>
         </div>
       </section>
     </div>
@@ -1305,9 +1339,17 @@ function Avatar3DPage(){
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState("");
   const iframeRef = useRef(null);
+  const avatarSpeedRef = useRef(1);
   useEffect(() => {
-    fetch(API.baseUrl + API.endpoints.signs).then(r => r.json()).then(d => setWords(d.words || [])).catch(() => setWords([]));
+    apiFetch(API.endpoints.signs).then(d => setWords(d.words || [])).catch(() => setWords([]));
+    apiFetch(API.endpoints.settings).then(s => {
+      avatarSpeedRef.current = Number(s?.avatar_speed) || 1;
+      sendSpeed();
+    }).catch(() => {});
   }, []);
+  const sendSpeed = () => {
+    iframeRef.current?.contentWindow?.postMessage({type:"set_speed", value:avatarSpeedRef.current}, window.location.origin);
+  };
   const play = (word) => {
     setSelected(word);
     // avatar3d.html only reacts to messages of type "play_sign"
@@ -1319,7 +1361,7 @@ function Avatar3DPage(){
     .sort((a,b) => signRank(a) - signRank(b) || a.localeCompare(b));
   return (
     <div className="avatar-grid">
-      <iframe ref={iframeRef} className="avatar-frame" src={API.endpoints.avatar3d} title="SIGNTURK 3D Animasyon" />
+      <iframe ref={iframeRef} className="avatar-frame" src={API.endpoints.avatar3d} title="SIGNTURK 3D Animasyon" onLoad={sendSpeed} />
       <section className="panel">
         <div className="panel-head"><div><h3>Animasyon Sözlüğü</h3><span>{filtered.length} kelime</span></div></div>
         <div className="panel-body">
@@ -1345,12 +1387,12 @@ function Avatar3DPage(){
 
 function AdminOverview(){
   const [ov, setOv] = useState(null);
-  useEffect(() => { fetch(API.baseUrl + API.endpoints.adminOverview).then(r => r.json()).then(setOv).catch(() => {}); }, []);
+  useEffect(() => { apiFetch(API.endpoints.adminOverview).then(setOv).catch(() => {}); }, []);
   return (
     <div className="grid cols-4">
-      <Metric label="Aktif Kullanıcı" value={ov?.active_users ?? "-"} sub="son durum" icon="Users" ok/>
+      <Metric label="Aktif Hesap" value={ov?.active_users ?? "-"} sub={`toplam ${ov?.total_users ?? "-"}`} icon="Users" ok/>
       <Metric label="Çeviri" value={ov?.translations ?? "-"} sub="toplam kayıt" icon="Languages" ok/>
-      <Metric label="Ortalama Güven" value={ov?.avg_confidence ? `${ov.avg_confidence}%` : "-"} sub="model ortalaması" icon="Gauge" ok/>
+      <Metric label="Ortalama Güven" value={ov?.avg_confidence ? `${ov.avg_confidence}%` : "-"} sub="onaylanan kelimeler" icon="Gauge" ok/>
       <Metric label="Log" value={ov?.logs ?? "-"} sub="sistem kaydı" icon="ListChecks" ok/>
     </div>
   );
@@ -1358,7 +1400,7 @@ function AdminOverview(){
 
 function AdminUsers(){
   const [rows, setRows] = useState([]);
-  useEffect(() => { fetch(API.baseUrl + API.endpoints.adminUsers).then(r => r.json()).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => {}); }, []);
+  useEffect(() => { apiFetch(API.endpoints.adminUsers).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => {}); }, []);
   return (
     <section className="panel"><div className="panel-head"><div><h3>Kullanıcılar</h3><span>{rows.length} hesap</span></div></div>
       <div className="table-wrap"><table><thead><tr><th>Ad</th><th>E-posta</th><th>Rol</th><th>Oturum</th></tr></thead><tbody>{rows.map((u,i) => <tr key={u.id || i}><td>{u.name || u.full_name || "-"}</td><td>{u.email}</td><td>{u.role}</td><td>{u.sessions ?? "-"}</td></tr>)}</tbody></table></div>
@@ -1368,7 +1410,7 @@ function AdminUsers(){
 
 function AdminModel(){
   const [m, setM] = useState(null);
-  useEffect(() => { fetch(API.baseUrl + API.endpoints.adminModel).then(r => r.json()).then(setM).catch(() => {}); }, []);
+  useEffect(() => { apiFetch(API.endpoints.adminModel).then(setM).catch(() => {}); }, []);
   if (!m) return <div className="panel"><div className="empty">Model bilgisi yükleniyor.</div></div>;
   const items = [
     ["Canlı model", m.live_model || "-"],
@@ -1387,7 +1429,7 @@ function AdminModel(){
 
 function AdminLogs(){
   const [rows, setRows] = useState([]);
-  useEffect(() => { fetch(API.baseUrl + API.endpoints.adminLogs).then(r => r.json()).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => {}); }, []);
+  useEffect(() => { apiFetch(API.endpoints.adminLogs).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => {}); }, []);
   return (
     <section className="panel"><div className="panel-head"><div><h3>Loglar</h3><span>{rows.length} kayıt</span></div></div>
       <div className="table-wrap"><table><thead><tr><th>Zaman</th><th>Seviye</th><th>Mesaj</th><th>Kullanıcı</th></tr></thead><tbody>{rows.map((l,i) => <tr key={l.id || i}><td>{l.timestamp ? new Date(l.timestamp).toLocaleString("tr-TR") : "-"}</td><td>{l.level}</td><td>{l.message}</td><td>{l.user || "-"}</td></tr>)}</tbody></table></div>
@@ -1397,12 +1439,23 @@ function AdminLogs(){
 
 function App(){
   const [userState, setUserState] = useState(() => {
-    try{ return JSON.parse(localStorage.getItem("signturk_user") || "null"); }catch{ return null; }
+    try{
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+      return saved?.access_token ? saved : null;
+    }catch{ return null; }
   });
   const setUser = useCallback((user) => {
-    if (user) localStorage.setItem("signturk_user", JSON.stringify(user));
-    else localStorage.removeItem("signturk_user");
+    if (user) localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+    else{
+      if (storedToken()) apiFetch(API.endpoints.logout, {method:"POST"}).catch(() => {});
+      localStorage.removeItem(STORAGE_KEY);
+    }
     setUserState(user);
+  }, []);
+  useEffect(() => {
+    const onExpired = () => { localStorage.removeItem(STORAGE_KEY); setUserState(null); };
+    window.addEventListener("signturk:logout", onExpired);
+    return () => window.removeEventListener("signturk:logout", onExpired);
   }, []);
   if (!userState) return <AuthScreen onLogin={setUser}/>;
   return <Shell user={userState} setUser={setUser}/>;

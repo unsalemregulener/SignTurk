@@ -5,7 +5,7 @@ over WebSocket, sentence assembly, and the landmark data that drives the
 3D avatar.
 """
 
-import os, json, time, traceback, uuid, logging, base64, shutil, tempfile
+import os, json, time, traceback, uuid, logging, base64, shutil, tempfile, secrets
 import numpy as np
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -19,11 +19,13 @@ except Exception:
 
 import cv2
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, EmailStr
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from database import engine, get_db, Base
@@ -405,7 +407,7 @@ def run_inference(input_tensor):
         "label_tr": best_lbl["label_tr"],
         "label_en": best_lbl["label_en"],
         "confidence": best_conf,
-        "animation_key": f"{best_lbl['label_en']}_sign",
+        "animation_key": best_lbl["label_tr"].lower() if best_lbl["label_tr"].lower() in LANDMARK_INDEX else "none",
         "category": "Sign",
         "above_threshold": best_conf >= CONFIDENCE_THRESHOLD,
         "top_predictions": [
@@ -466,25 +468,35 @@ def decode_base64_image(data_url):
         return None
 
 
+def format_confidence(value: float) -> str:
+    return f"{value * 100:.1f}%"
+
+
+def parse_confidence(value: Optional[str]) -> Optional[float]:
+    try:
+        return float(str(value).rstrip("%"))
+    except (TypeError, ValueError):
+        return None
+
+
+def iso_time(value) -> Optional[str]:
+    return value.isoformat() if value else None
+
+
 # ── Schemas ───────────────────────────────────────────────
 class SettingsData(BaseModel):
-    camera: str
-    voice: str
-    speech_rate: float
-    avatar_speed: float
-    tts_enabled: bool = True
-    notifications_enabled: bool = True
-    avatar_enabled: bool = True
-    websocket_enabled: bool = True
+    tts_enabled: bool = False
+    speech_rate: float = Field(1.0, ge=0.5, le=2.0)
+    avatar_speed: float = Field(1.0, ge=0.25, le=3.0)
 
 class RegisterData(BaseModel):
-    full_name: str
+    full_name: str = Field(min_length=2, max_length=120)
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8, max_length=128)
 
 class LoginData(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=128)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -492,11 +504,66 @@ class LoginData(BaseModel):
 # ═══════════════════════════════════════════════════════════
 app = FastAPI(title="SignTurk API", version="3.1.0")
 
+_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        "ALLOWED_ORIGINS",
+        "http://localhost:8000,http://127.0.0.1:8000",
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], allow_credentials=True,
-    allow_methods=["*"], allow_headers=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+
+# ── Authentication ────────────────────────────────────────
+# Bearer tokens live in memory: restarting the server signs everyone out.
+# A multi-instance deployment needs signed, expiring tokens or a shared store.
+_bearer = HTTPBearer(auto_error=False)
+_access_tokens: Dict[str, int] = {}
+
+
+def _issue_access_token(user_id: int) -> str:
+    token = secrets.token_urlsafe(32)
+    _access_tokens[token] = user_id
+    return token
+
+
+def _user_for_token(token: Optional[str], db: Session):
+    user_id = _access_tokens.get(token or "")
+    if not user_id:
+        return None
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user or user.status != "Active":
+        return None
+    return user
+
+
+def current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+    db: Session = Depends(get_db),
+):
+    user = _user_for_token(credentials.credentials if credentials else None, db)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Oturum açmanız gerekiyor",
+        )
+    return user
+
+
+def admin_user(user=Depends(current_user)):
+    if user.role != "Admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bu işlem için yönetici yetkisi gerekiyor",
+        )
+    return user
 
 # ── Sentence engine (rule-based; ML grammar and TTS stay opt-in) ─────
 try:
@@ -510,8 +577,8 @@ except Exception as e:
 try:
     from text_processing.web.router import admin_router as text_admin_router
     from text_processing.web.router import router as text_processing_router
-    app.include_router(text_processing_router)
-    app.include_router(text_admin_router)
+    app.include_router(text_processing_router, dependencies=[Depends(current_user)])
+    app.include_router(text_admin_router, dependencies=[Depends(admin_user)])
     logger.info("[TEXT] /api/text/* routes mounted")
 except Exception as e:
     logger.warning(f"[TEXT] /api/text/* routes not mounted (optional deps?): {e}")
@@ -610,10 +677,11 @@ async def get_landmark(word: str):
 @app.post("/api/register")
 @app.post("/api/auth/register")
 def register(data: RegisterData, db: Session = Depends(get_db)):
-    if db.query(models.User).filter(models.User.email == data.email.lower()).first():
+    email = data.email.lower().strip()
+    if db.query(models.User).filter(models.User.email == email).first():
         return JSONResponse(status_code=400, content={"error": "Email zaten kayıtlı"})
     user = models.User(
-        full_name=data.full_name, email=data.email.lower(),
+        full_name=data.full_name.strip(), email=email,
         password_hash=hash_pw(data.password),
         role="User", status="Active", sessions=0,
     )
@@ -628,15 +696,25 @@ def register(data: RegisterData, db: Session = Depends(get_db)):
 @app.post("/api/login")
 @app.post("/api/auth/login")
 def login(data: LoginData, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == data.email.lower()).first()
-    if not user or not verify_pw(data.password, user.password_hash):
+    user = db.query(models.User).filter(models.User.email == data.email.lower().strip()).first()
+    if not user or user.status != "Active" or not verify_pw(data.password, user.password_hash):
         return JSONResponse(status_code=401, content={"error": "Hatalı email veya şifre"})
     user.sessions += 1
     db.commit()
-    add_log_db(db, "Success", f"Giriş: {user.email}")
+    add_log_db(db, "Success", f"Giriş: {user.email}", user.email)
     return {"message": "Giriş başarılı",
+            "access_token": _issue_access_token(user.id),
+            "token_type": "bearer",
             "user": {"id": user.id, "full_name": user.full_name,
                      "email": user.email, "role": user.role}}
+
+
+@app.post("/api/logout")
+@app.post("/api/auth/logout")
+def logout(credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer)):
+    if credentials:
+        _access_tokens.pop(credentials.credentials, None)
+    return {"message": "Çıkış yapıldı"}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -645,10 +723,22 @@ def login(data: LoginData, db: Session = Depends(get_db)):
 @app.websocket("/ws/stream")
 @app.websocket("/api/predict/live")
 async def live_predict(websocket: WebSocket):
+    # Browsers cannot set headers on WebSocket requests, so the token comes
+    # in the query string.
+    auth_db = next(get_db())
+    try:
+        user = _user_for_token(websocket.query_params.get("token"), auth_db)
+        user_id = user.id if user else None
+        user_email = user.email if user else None
+    finally:
+        auth_db.close()
+    if user_id is None:
+        await websocket.close(code=1008, reason="Oturum açmanız gerekiyor")
+        return
     await websocket.accept()
     logger.info("[WS-LIVE] Connected")
     db = next(get_db())
-    add_log_db(db, "Info", "Canlı akış bağlandı")
+    add_log_db(db, "Info", "Canlı akış bağlandı", user_email)
     buf = FrameBuffer(seq_len=SEQ_LEN)
     missed_hand_frames = 0
     # A prediction only becomes part of the sentence (and of History) after
@@ -657,6 +747,7 @@ async def live_predict(websocket: WebSocket):
     session_id = uuid.uuid4().hex[:8]
     sentence_words: List[str] = []
     last_candidate: Optional[str] = None
+    last_candidate_conf: Optional[float] = None
     try:
         while True:
             incoming = await websocket.receive_text()
@@ -672,16 +763,20 @@ async def live_predict(websocket: WebSocket):
                         word = (payload.get("word") or last_candidate or "").strip()
                         if word:
                             sentence_words.append(word)
+                            conf = (format_confidence(last_candidate_conf)
+                                    if word == last_candidate and last_candidate_conf is not None
+                                    else "-")
                             try:
                                 db.add(models.History(
-                                    session_id=session_id, mode="Live",
-                                    result=word, confidence="approved",
+                                    user_id=user_id, session_id=session_id, mode="Live",
+                                    result=word, confidence=conf,
                                 ))
                                 db.commit()
                             except Exception as e:
                                 db.rollback()
                                 logger.warning(f"[DB] approved word save skipped: {e}")
                         last_candidate = None
+                        last_candidate_conf = None
                         await websocket.send_json({
                             "type": "sentence_update",
                             "words": list(sentence_words),
@@ -690,6 +785,7 @@ async def live_predict(websocket: WebSocket):
                         })
                     elif action == "reject":
                         last_candidate = None
+                        last_candidate_conf = None
                         await websocket.send_json({"type": "rejected"})
                     elif action == "undo":
                         if sentence_words:
@@ -702,6 +798,7 @@ async def live_predict(websocket: WebSocket):
                     elif action in ("reset_sentence", "clear_sentence"):
                         sentence_words = []
                         last_candidate = None
+                        last_candidate_conf = None
                         await websocket.send_json({
                             "type": "sentence_update", "words": [], "sentence": "",
                         })
@@ -796,6 +893,7 @@ async def live_predict(websocket: WebSocket):
             # candidate; nothing is stored until the user approves it.
             if prediction["above_threshold"]:
                 last_candidate = prediction["label_tr"]
+                last_candidate_conf = prediction["confidence"]
             result["pending_word"] = last_candidate
 
             await websocket.send_json(result)
@@ -803,16 +901,16 @@ async def live_predict(websocket: WebSocket):
 
     except WebSocketDisconnect:
         logger.info("[WS-LIVE] Disconnected")
-        add_log_db(db, "Info", "Canlı akış kapandı")
+        add_log_db(db, "Info", "Canlı akış kapandı", user_email)
     except Exception as e:
         logger.error(f"[WS-LIVE] Error: {e}\n{traceback.format_exc()}")
-        add_log_db(db, "Warning", f"Canlı akış hatası: {e}")
+        add_log_db(db, "Warning", f"Canlı akış hatası: {e}", user_email)
     finally:
         db.close()
 
 
 @app.post("/api/predict/sequence")
-async def predict_sequence(payload: Dict[str, Any]):
+async def predict_sequence(payload: Dict[str, Any], _user=Depends(current_user)):
     try:
         raw = np.array(payload["landmarks"], dtype=np.float32)
         if raw.shape != (SEQ_LEN, 126):
@@ -829,91 +927,20 @@ async def predict_sequence(payload: Dict[str, Any]):
 # ═══════════════════════════════════════════════════════════
 #  ROUTES — History / Settings / Dictionary / Admin
 # ═══════════════════════════════════════════════════════════
-@app.get("/api/history")
-def get_history(db: Session = Depends(get_db)):
-    rows = db.query(models.History).order_by(
-        models.History.created_at.desc()).limit(100).all()
-    return [{"id": r.session_id, "mode": r.mode, "result": r.result,
-             "conf": r.confidence,
-             "time": r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else ""}
-            for r in rows]
+def _history_row(r: "models.History") -> Dict[str, Any]:
+    return {"id": r.id, "session_id": r.session_id, "mode": r.mode,
+            "result": r.result, "confidence": r.confidence,
+            "created_at": iso_time(r.created_at)}
 
-@app.get("/api/settings")
-def get_settings(db: Session = Depends(get_db)):
-    s = db.query(models.Setting).first()
-    if not s:
-        return {"camera": "Default Camera", "voice": "Female Voice",
-                "speech_rate": 1.0, "avatar_speed": 1.0,
-                "tts_enabled": True, "notifications_enabled": True,
-                "avatar_enabled": True, "websocket_enabled": True}
-    return {"camera": s.camera, "voice": s.voice,
-            "speech_rate": s.speech_rate, "avatar_speed": s.avatar_speed,
-            "tts_enabled": s.tts_enabled, "notifications_enabled": s.notifications_enabled,
-            "avatar_enabled": s.avatar_enabled, "websocket_enabled": s.websocket_enabled}
 
-@app.post("/api/settings")
-def save_settings(data: SettingsData, db: Session = Depends(get_db)):
-    s = db.query(models.Setting).first()
-    if not s:
-        s = models.Setting(id=1)
-        db.add(s)
-    for field, val in data.dict().items():
-        setattr(s, field, val)
-    db.commit()
-    add_log_db(db, "Info", "Ayarlar güncellendi", "admin")
-    return {"message": "Ayarlar kaydedildi", "data": data.dict()}
+def _average_confidence(rows) -> float:
+    values = [v for v in (parse_confidence(r.confidence) for r in rows) if v is not None]
+    return round(sum(values) / len(values), 1) if values else 0.0
 
-@app.get("/api/dictionary")
-async def get_dictionary():
-    return [{"classId": int(k), "tr": v.get("TR", "?"), "en": v.get("EN", "?"),
-             "animation": f"{v.get('EN','unknown')}_sign", "category": "Sign"}
-            for k, v in sorted(LABEL_MAP.items(), key=lambda x: int(x[0]))]
 
-@app.get("/api/dictionary/{class_id}")
-async def get_dictionary_by_id(class_id: int):
-    info = get_label(class_id)
-    return {"classId": info["class_id"], "tr": info["label_tr"],
-            "en": info["label_en"], "animation": f"{info['label_en']}_sign"}
-
-@app.get("/api/avatar/{class_id}")
-async def get_avatar(class_id: int):
-    info = get_label(class_id)
-    return {"class_id": info["class_id"], "label_tr": info["label_tr"],
-            "label_en": info["label_en"], "animation_key": f"{info['label_en']}_sign"}
-
-@app.get("/api/admin/overview")
-def admin_overview(db: Session = Depends(get_db)):
-    rows = db.query(models.History).order_by(
-        models.History.created_at.desc()).limit(100).all()
-    confs = []
-    for r in rows:
-        try:
-            confs.append(float(r.confidence.replace("%", "")))
-        except ValueError:
-            pass
+def _model_status() -> Dict[str, Any]:
     return {
-        "total_users": db.query(models.User).count(),
-        "active_users": db.query(models.User).filter(models.User.status == "Active").count(),
-        "translations": db.query(models.History).count(),
-        "avg_confidence": round(sum(confs)/len(confs), 1) if confs else 0.0,
-    }
-
-@app.get("/api/admin/users")
-def admin_users(db: Session = Depends(get_db)):
-    return [{"name": u.full_name, "email": u.email,
-             "role": u.role, "sessions": u.sessions, "status": u.status}
-            for u in db.query(models.User).all()]
-
-@app.get("/api/admin/logs")
-def admin_logs(db: Session = Depends(get_db)):
-    return [{"level": l.level, "message": l.message, "user": l.user,
-             "when": l.created_at.strftime("%Y-%m-%d %H:%M") if l.created_at else ""}
-            for l in db.query(models.Log).order_by(
-                models.Log.created_at.desc()).limit(100).all()]
-
-@app.get("/api/admin/model")
-async def admin_model():
-    return {
+        "model_loaded": MODEL is not None,
         "live_model": "Yüklü" if MODEL else "Yüklenmedi",
         "num_classes": NUM_CLASSES,
         "label_map_size": len(LABEL_MAP),
@@ -924,8 +951,93 @@ async def admin_model():
         "database": "Supabase PostgreSQL",
     }
 
+
+@app.get("/api/history")
+def get_history(db: Session = Depends(get_db), user=Depends(current_user)):
+    rows = (db.query(models.History)
+            .filter(models.History.user_id == user.id)
+            .order_by(models.History.created_at.desc(), models.History.id.desc())
+            .limit(100).all())
+    return [_history_row(r) for r in rows]
+
+@app.get("/api/me/summary")
+def my_summary(db: Session = Depends(get_db), user=Depends(current_user)):
+    rows = db.query(models.History).filter(models.History.user_id == user.id).all()
+    return {"translations": len(rows),
+            "avg_confidence": _average_confidence(rows),
+            "sessions": user.sessions}
+
+@app.get("/api/settings")
+def get_settings(db: Session = Depends(get_db), user=Depends(current_user)):
+    s = db.query(models.UserSetting).filter(models.UserSetting.user_id == user.id).first()
+    if not s:
+        return SettingsData().model_dump()
+    return {"tts_enabled": bool(s.tts_enabled), "speech_rate": s.speech_rate,
+            "avatar_speed": s.avatar_speed}
+
+@app.post("/api/settings")
+def save_settings(data: SettingsData, db: Session = Depends(get_db), user=Depends(current_user)):
+    s = db.query(models.UserSetting).filter(models.UserSetting.user_id == user.id).first()
+    if not s:
+        s = models.UserSetting(user_id=user.id)
+        db.add(s)
+    for field, val in data.model_dump().items():
+        setattr(s, field, val)
+    db.commit()
+    add_log_db(db, "Info", "Ayarlar güncellendi", user.email)
+    return {"message": "Ayarlar kaydedildi", "data": data.model_dump()}
+
+def _dictionary_entry(class_id: int) -> Dict[str, Any]:
+    info = get_label(class_id)
+    key = info["label_tr"].lower()
+    return {"class_id": class_id, "tr": info["label_tr"], "en": info["label_en"],
+            "animation_key": key if key in LANDMARK_INDEX else None}
+
+@app.get("/api/dictionary")
+async def get_dictionary():
+    return [_dictionary_entry(int(k)) for k in sorted(LABEL_MAP, key=int)]
+
+@app.get("/api/dictionary/{class_id}")
+async def get_dictionary_by_id(class_id: int):
+    if str(class_id) not in LABEL_MAP:
+        raise HTTPException(status_code=404, detail="Sınıf bulunamadı")
+    return _dictionary_entry(class_id)
+
+@app.get("/api/model/status")
+async def model_status(_user=Depends(current_user)):
+    return _model_status()
+
+@app.get("/api/admin/overview")
+def admin_overview(db: Session = Depends(get_db), _admin=Depends(admin_user)):
+    rows = db.query(models.History).order_by(
+        models.History.created_at.desc()).limit(100).all()
+    return {
+        "total_users": db.query(models.User).count(),
+        "active_users": db.query(models.User).filter(models.User.status == "Active").count(),
+        "translations": db.query(models.History).count(),
+        "avg_confidence": _average_confidence(rows),
+        "logs": db.query(models.Log).count(),
+    }
+
+@app.get("/api/admin/users")
+def admin_users(db: Session = Depends(get_db), _admin=Depends(admin_user)):
+    return [{"id": u.id, "name": u.full_name, "email": u.email,
+             "role": u.role, "sessions": u.sessions, "status": u.status}
+            for u in db.query(models.User).all()]
+
+@app.get("/api/admin/logs")
+def admin_logs(db: Session = Depends(get_db), _admin=Depends(admin_user)):
+    return [{"id": l.id, "level": l.level, "message": l.message, "user": l.user,
+             "timestamp": iso_time(l.created_at)}
+            for l in db.query(models.Log).order_by(
+                models.Log.created_at.desc(), models.Log.id.desc()).limit(100).all()]
+
+@app.get("/api/admin/model")
+async def admin_model(_admin=Depends(admin_user)):
+    return _model_status()
+
 @app.get("/api/debug/model-check")
-async def debug_model_check():
+async def debug_model_check(_admin=Depends(admin_user)):
     return {
         "live_model_loaded": MODEL is not None,
         "mediapipe_ready": MP_HANDS is not None,
@@ -962,17 +1074,24 @@ def bootstrap_admin(db: Session) -> None:
     logger.info("[DB] Administrator account created from environment")
 
 
+def ensure_history_user_column() -> None:
+    """Add history.user_id to databases created before per-user history."""
+    columns = {col["name"] for col in inspect(engine).get_columns("history")}
+    if "user_id" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE history ADD COLUMN user_id INTEGER"))
+        logger.info("[DB] Added history.user_id column")
+
+
 @app.on_event("startup")
 async def startup_event():
     Base.metadata.create_all(bind=engine)
+    ensure_history_user_column()
     logger.info("[DB] Tables ready")
 
     db = next(get_db())
     try:
         bootstrap_admin(db)
-        if db.query(models.Setting).count() == 0:
-            db.add(models.Setting(id=1))
-            db.commit()
         add_log_db(db, "Info", "Sunucu başlatıldı", "system")
     finally:
         db.close()

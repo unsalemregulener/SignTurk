@@ -15,7 +15,7 @@ class CorrectRequest(BaseModel):
     # model_key. model_arch picks the adapter (inferred from the name if None).
     model_name: Optional[str] = None
     model_arch: Optional[str] = None
-    synthesize_audio: bool = True
+    synthesize_audio: bool = False  # speech is opt-in per request
 
 
 class CorrectResponse(BaseModel):
