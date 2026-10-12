@@ -1120,9 +1120,11 @@ function LivePage(){
       }
       await loadDevices();
       const endpoint = mode === "226" ? API.endpoints.live226 : API.endpoints.live;
-      const ws = new WebSocket(`${API.wsUrl}${endpoint}?token=${encodeURIComponent(storedToken())}`);
+      const ws = new WebSocket(`${API.wsUrl}${endpoint}`);
       wsRef.current = ws;
       ws.onopen = () => {
+        // The token goes in the first message, not in the URL, so it stays out of server logs.
+        ws.send(JSON.stringify({action:"auth", token:storedToken()}));
         inFlightRef.current = false;
         predictionHoldUntilRef.current = 0;
         setRunning(true);

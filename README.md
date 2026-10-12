@@ -139,7 +139,8 @@ runs with registered users only.
 
 Authenticated routes take `Authorization: Bearer <token>`; the token comes
 from `/api/login`. Browsers cannot set headers on WebSockets, so the live
-sockets take it as `?token=`.
+sockets expect it as their first message, `{"action": "auth", "token": "…"}`,
+which keeps it out of URLs and access logs.
 
 | Route | Access | Purpose |
 | --- | --- | --- |
@@ -149,8 +150,8 @@ sockets take it as `?token=`.
 | `GET /signs`, `GET /landmark/{word}` | public | avatar vocabulary and landmark sequences |
 | `GET /api/dictionary`, `GET /api/dictionary/{autsl_id}` | public | the 226 signs: Turkish spelling, English (for the 179), which mode knows them |
 | `POST /api/register`, `POST /api/login`, `POST /api/logout` | public | accounts |
-| `WS /api/predict/live?token=…` | user | fast mode; also accepts 126 landmark values per message instead of a frame |
-| `WS /api/predict/live226?token=…` | user | full mode: `{"action": "start"}`, 32 × `{"image": data_url}`, `{"action": "end"}` |
+| `WS /api/predict/live` | user | fast mode; also accepts 126 landmark values per message instead of a frame |
+| `WS /api/predict/live226` | user | full mode: `{"action": "start"}`, 32 × `{"image": data_url}`, `{"action": "end"}` |
 | `POST /api/predict/sequence` | user | classify 16 or 32 frames of 126 landmark values (MediaPipe's "Left" hand first) |
 | `GET /api/history`, `GET /api/me/summary` | user | approved words of the current user |
 | `GET /api/settings`, `POST /api/settings` | user | speech and avatar speed |

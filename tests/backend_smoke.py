@@ -17,6 +17,7 @@ import secrets
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -96,6 +97,14 @@ def camera_clip(path, count=32):
     """`count` evenly spaced camera-panel frames, as data URLs."""
     frames = camera_frames(path)
     return [data_url(frames[i]) for i in np.linspace(0, len(frames) - 1, count).round().astype(int)]
+
+
+@contextmanager
+def live_socket(client, path, token):
+    """A live WebSocket that has sent its token as the first message."""
+    with client.websocket_connect(path) as ws:
+        ws.send_text(json.dumps({"action": "auth", "token": token}))
+        yield ws
 
 
 def wait_for_226(client, seconds=900):
@@ -197,14 +206,17 @@ with TestClient(backend.app) as client:
     r = client.post("/api/predict/sequence", headers=U, json={"landmarks": [[0.0] * 126] * 20})
     check("sequence of the wrong length rejected", r.status_code == 400)
 
-    try:
-        with client.websocket_connect("/api/predict/live") as ws:
-            ws.receive_text()
-        check("live socket refuses a missing token", False)
-    except WebSocketDisconnect as exc:
-        check("live socket refuses a missing token", exc.code == 1008, exc.code)
+    for name, path in (("live socket refuses a missing token", "/api/predict/live"),
+                       ("token in the URL is not accepted", f"/api/predict/live?token={user_token}")):
+        try:
+            with client.websocket_connect(path) as ws:
+                ws.send_text(json.dumps({"landmarks": [0.0] * 126}))
+                ws.receive_text()
+            check(name, False)
+        except WebSocketDisconnect as exc:
+            check(name, exc.code == 1008, exc.code)
 
-    with client.websocket_connect(f"/api/predict/live?token={user_token}") as ws:
+    with live_socket(client, "/api/predict/live", user_token) as ws:
         ws.send_text(json.dumps({"image": video_frame_data_url(ROOT / "docs" / "videos" / "cay.mp4")}))
         reply = ws.receive_json()
         check("MediaPipe processes a camera frame", reply.get("label_tr") != "MediaPipe kullanılamıyor", reply)
@@ -227,7 +239,7 @@ with TestClient(backend.app) as client:
                 top = backend.run_best_inference(candidate)["top_predictions"]
                 print(f"     cay recording, {name}: {[(p['label_tr'], p['confidence']) for p in top]}")
         first = None
-        with client.websocket_connect(f"/api/predict/live?token={user_token}") as ws:
+        with live_socket(client, "/api/predict/live", user_token) as ws:
             for frame in frames:
                 ws.send_text(json.dumps({"image": data_url(frame)}))
                 reply = ws.receive_json()
@@ -238,7 +250,7 @@ with TestClient(backend.app) as client:
               first is not None and first["label_tr"].strip("()?") == "cay",
               first and [(p["label_tr"], p["confidence"]) for p in first["top_predictions"]] or f"{len(vectors)} hand frames")
 
-    with client.websocket_connect(f"/api/predict/live?token={user_token}") as ws:
+    with live_socket(client, "/api/predict/live", user_token) as ws:
         ws.send_text(json.dumps({"landmarks": [0.0] * 126}))
         check("frame without hands is skipped", ws.receive_json()["label_tr"] == "El algılanmadı")
         prediction = None
@@ -272,7 +284,7 @@ with TestClient(backend.app) as client:
     check("226 model ready", status["ready"], status)
     if status["ready"]:
         clip = camera_clip(ROOT / "docs" / "videos" / "cay.mp4")
-        with client.websocket_connect(f"/api/predict/live226?token={user_token}") as ws:
+        with live_socket(client, "/api/predict/live226", user_token) as ws:
             ws.send_text(json.dumps({"action": "start"}))
             check("226 recording starts", ws.receive_json().get("type") == "recording")
             started = time.time()

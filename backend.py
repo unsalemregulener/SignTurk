@@ -721,15 +721,29 @@ def logout(credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer
 SENTENCE_ACTIONS = ("approve", "reject", "undo", "reset_sentence", "clear_sentence")
 
 
-async def _authenticate_socket(websocket: WebSocket):
-    """(user id, email) for the ?token= of a WebSocket, or None after closing it.
+AUTH_TIMEOUT_SECONDS = 10
 
-    Browsers cannot set headers on WebSocket requests, so the token comes in
-    the query string.
+
+async def _authenticate_socket(websocket: WebSocket):
+    """Accept a live socket and read its first message, {"action": "auth", "token": ...}.
+
+    Browsers cannot set headers on WebSocket requests. The token travels in the
+    first message rather than the URL so it stays out of access logs. Returns
+    (user id, email), or None after closing the socket.
     """
+    await websocket.accept()
+    token = None
+    try:
+        message = json.loads(await asyncio.wait_for(websocket.receive_text(), timeout=AUTH_TIMEOUT_SECONDS))
+        if isinstance(message, dict) and message.get("action") == "auth":
+            token = message.get("token")
+    except WebSocketDisconnect:
+        return None
+    except Exception:
+        pass
     db = next(get_db())
     try:
-        user = _user_for_token(websocket.query_params.get("token"), db)
+        user = _user_for_token(token, db)
         identity = (user.id, user.email) if user else None
     finally:
         db.close()
@@ -817,7 +831,6 @@ async def live_predict(websocket: WebSocket):
     if identity is None:
         return
     user_id, user_email = identity
-    await websocket.accept()
     logger.info("[WS-LIVE] Connected")
     db = next(get_db())
     add_log_db(db, "Info", "Canlı akış bağlandı", user_email)
@@ -954,7 +967,8 @@ MAX_CLIP_FRAMES = 96
 async def live226_predict(websocket: WebSocket):
     """One recorded sign at a time with the 226-class ensemble.
 
-    The client sends {"action": "start"}, the clip's unmirrored frames as
+    After {"action": "auth", "token": ...} the client sends {"action": "start"},
+    the clip's unmirrored frames as
     {"image": data_url}, then {"action": "end"}. Each frame is processed as it
     arrives ({"type": "progress"}); "end" returns {"type": "result"} with the
     top three signs. Approval actions work as on /api/predict/live.
@@ -963,7 +977,6 @@ async def live226_predict(websocket: WebSocket):
     if identity is None:
         return
     user_id, user_email = identity
-    await websocket.accept()
     if not LIVE226.ready:
         await websocket.send_json({"type": "unavailable", **LIVE226.status()})
         await websocket.close(code=1013)
