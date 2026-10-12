@@ -1,8 +1,10 @@
 """Download the model weights listed in model-assets.json and verify them.
 
-    python tools/download_models.py          # download missing or changed files
-    python tools/download_models.py --check  # only check that every URL answers
-                                             # with the expected size (no download)
+    python tools/download_models.py                # 179-class live model (63 MB)
+    python tools/download_models.py --bundle 226   # 226-class ensemble and RTMW (about 660 MB)
+    python tools/download_models.py --bundle all
+    python tools/download_models.py --check        # only check that every URL answers
+                                                   # with the expected size (no download)
 """
 
 from __future__ import annotations
@@ -78,12 +80,15 @@ def check(asset: dict) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--bundle", choices=("live", "226", "all"), default="live",
+                        help="which models: the 179-class live model, the 226-class ensemble, or both")
     parser.add_argument("--check", action="store_true", help="verify the URLs without downloading")
     parser.add_argument("--force", action="store_true", help="download even if a local file verifies")
     parser.add_argument("--manifest", type=Path, default=MANIFEST)
     args = parser.parse_args()
 
-    assets = json.loads(args.manifest.read_text(encoding="utf-8"))["assets"]
+    assets = [asset for asset in json.loads(args.manifest.read_text(encoding="utf-8"))["assets"]
+              if args.bundle == "all" or asset["bundle"] == args.bundle]
     if args.check:
         return 0 if all([check(asset) for asset in assets]) else 1
     for asset in assets:

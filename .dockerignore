@@ -12,6 +12,7 @@ local_dev.db*
 uploads/
 *.log
 *.keras
+*.onnx
 *.part
 docs/
 tests/

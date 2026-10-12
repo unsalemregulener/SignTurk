@@ -21,6 +21,7 @@ uploads/
 
 # Downloaded model weights (see model-assets.json)
 *.keras
+*.onnx
 *.part
 
 # Editors and operating systems

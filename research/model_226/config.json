@@ -1,0 +1,18 @@
+{
+  "num_classes": 226,
+  "frame_count": 32,
+  "streams": {
+    "skeleton_v2": {"file": "models/skeleton_v2.keras", "weight": 0.10, "inputs": "skeleton"},
+    "skeleton_v4_seed": {"file": "models/skeleton_v4_seed.keras", "weight": 0.21, "inputs": "skeleton"},
+    "skeleton_v6_seed": {"file": "models/skeleton_v6_seed.keras", "weight": 0.55, "inputs": "skeleton"},
+    "hand_stream": {"file": "models/hand_stream.keras", "weight": 0.14, "inputs": "hand"}
+  },
+  "thresholds": {"top1": 0.70, "margin": 0.12},
+  "extractor": {
+    "detector": "models/rtmw_hf/yolox_m.onnx",
+    "detector_input_size": [640, 640],
+    "pose": "models/rtmw_hf/rtmw-dw-x-l_simcc-cocktail14.onnx",
+    "pose_input_size": [288, 384],
+    "keypoint_threshold": 0.05
+  }
+}
