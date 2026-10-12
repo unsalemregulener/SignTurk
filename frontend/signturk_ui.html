@@ -1369,12 +1369,21 @@ function DictionaryPage(){
     apiFetch(API.endpoints.dictionary).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => setRows([]));
   }, []);
   const filtered = rows.filter(r => `${r.text || ""} ${r.tr || ""} ${r.en || ""} ${r.class_id ?? ""}`.toLocaleLowerCase("tr-TR").includes(search.toLocaleLowerCase("tr-TR")));
+  const live = rows.filter(r => r.live_179_id != null).length;
   return (
     <section className="panel">
-      <div className="panel-head"><div><h3>SIGNTURK Sözlük</h3><span>{filtered.length} etiket</span></div><div className="field" style={{width:280}}><input className="input" placeholder="Ara" value={search} onChange={e => setSearch(e.target.value)} /></div></div>
+      <div className="panel-head"><div><h3>SIGNTURK Sözlük</h3><span>{filtered.length} işaret · {live} tanesi hızlı modelde</span></div><div className="field" style={{width:280}}><input className="input" placeholder="Ara" value={search} onChange={e => setSearch(e.target.value)} /></div></div>
       <div className="table-wrap">
-        <table><thead><tr><th>Sınıf</th><th>Türkçe</th><th>İngilizce</th><th>Anahtar</th></tr></thead>
-          <tbody>{filtered.map((r,i) => <tr key={i}><td className="mono">{r.class_id ?? r.id ?? i}</td><td>{r.text || r.tr || "-"}</td><td>{r.en || r.EN || r.label_en || "-"}</td><td className="mono">{r.animation_key || "-"}</td></tr>)}</tbody>
+        <table><thead><tr><th>AUTSL</th><th>Türkçe</th><th>İngilizce</th><th>Model</th><th>Anahtar</th></tr></thead>
+          <tbody>{filtered.map(r => (
+            <tr key={r.class_id}>
+              <td className="mono">{r.class_id}</td>
+              <td>{r.text || r.tr}</td>
+              <td>{r.en || "-"}</td>
+              <td>{r.live_179_id != null ? <span className="chip ok">179 · 226</span> : <span className="chip">226</span>}</td>
+              <td className="mono">{r.animation_key || "-"}</td>
+            </tr>
+          ))}</tbody>
         </table>
       </div>
     </section>

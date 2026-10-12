@@ -147,8 +147,10 @@ with TestClient(backend.app) as client:
     signs = client.get("/signs").json()
     check("avatar signs have Turkish labels", len(signs["labels"]) == 226 and signs["labels"].get("cay") == "çay")
     dictionary = client.get("/api/dictionary").json()
-    check("dictionary has 179 labels", len(dictionary) == 179)
-    check("English labels have no underscores", all("_" not in entry["en"] for entry in dictionary))
+    check("dictionary lists 226 signs, 179 of them in the live model",
+          len(dictionary) == 226 and sum(entry["live_179_id"] is not None for entry in dictionary) == 179)
+    check("English labels have no underscores", all("_" not in (entry["en"] or "") for entry in dictionary))
+    check("dictionary entry by AUTSL id", client.get("/api/dictionary/38").json().get("text") == "çay")
 
     check("text API needs a token", client.get("/api/text/models").status_code == 401)
     r = client.post("/api/text/correct", headers=U, json={"words": ["ben", "okul", "gitmek"]})

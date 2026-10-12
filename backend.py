@@ -1059,21 +1059,33 @@ def save_settings(data: SettingsData, db: Session = Depends(get_db), user=Depend
     add_log_db(db, "Info", "Ayarlar güncellendi", user.email)
     return {"message": "Ayarlar kaydedildi", "data": data.model_dump()}
 
-def _dictionary_entry(class_id: int) -> Dict[str, Any]:
-    info = get_label(class_id)
-    key = info["label_tr"].lower()
-    return {"class_id": class_id, "tr": info["label_tr"], "text": info["text_tr"],
-            "en": info["label_en"], "animation_key": key if key in LANDMARK_INDEX else None}
+def _dictionary_entries() -> List[Dict[str, Any]]:
+    """All 226 AUTSL signs; English names exist for the 179 in the live model."""
+    live = {info.get("TR"): (int(index), info) for index, info in LABEL_MAP.items()}
+    rows = []
+    for entry in sorted(LIVE226.vocabulary, key=lambda e: e["autsl_id"]):
+        gloss = entry["gloss"]
+        index, info = live.get(gloss, (None, {}))
+        rows.append({
+            "class_id": entry["autsl_id"],
+            "tr": gloss,
+            "text": restore_turkish(gloss),
+            "en": info.get("EN", "").replace("_", " ") or None,
+            "live_179_id": index,
+            "animation_key": gloss if gloss in LANDMARK_INDEX else None,
+        })
+    return rows
 
 @app.get("/api/dictionary")
 async def get_dictionary():
-    return [_dictionary_entry(int(k)) for k in sorted(LABEL_MAP, key=int)]
+    return _dictionary_entries()
 
 @app.get("/api/dictionary/{class_id}")
 async def get_dictionary_by_id(class_id: int):
-    if str(class_id) not in LABEL_MAP:
-        raise HTTPException(status_code=404, detail="Sınıf bulunamadı")
-    return _dictionary_entry(class_id)
+    for row in _dictionary_entries():
+        if row["class_id"] == class_id:
+            return row
+    raise HTTPException(status_code=404, detail="Sınıf bulunamadı")
 
 @app.get("/api/model/status")
 async def model_status(_user=Depends(current_user)):
