@@ -34,7 +34,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 import backend
-from live_pipeline import resample_window
+from live_pipeline import hands_to_landmarks, resample_window
 from text_processing.lexicon import restore_turkish
 
 results = []
@@ -46,14 +46,14 @@ def check(name, ok, detail=""):
 
 
 def landmark_vectors(path):
-    """126 values per frame (left hand 63 + right hand 63) from a landmark file."""
+    """Model input layout for a landmark file.
+
+    The files keep MediaPipe's handedness labels (left_hand = "Left"), so they
+    go through the same mapping as live frames.
+    """
     frames = json.loads(Path(path).read_text(encoding="utf-8"))["frames"]
-    rows = []
-    for frame in frames:
-        hands = [np.asarray(frame[key], dtype=np.float32).reshape(-1) if frame.get(key) else np.zeros(63, np.float32)
-                 for key in ("left_hand", "right_hand")]
-        rows.append(np.concatenate(hands))
-    return np.stack(rows)
+    return np.stack([hands_to_landmarks([("Left", frame.get("left_hand")), ("Right", frame.get("right_hand"))])
+                     for frame in frames])
 
 
 def video_frame_data_url(path, position=0.5):
@@ -124,10 +124,21 @@ with TestClient(backend.app) as client:
     window = resample_window(landmark_vectors(ROOT / "landmarks" / "cay.json"), 16)
     r = client.post("/api/predict/sequence", headers=U, json={"landmarks": window.tolist()})
     body = r.json()
-    check("sequence prediction from a landmark file", r.status_code == 200 and len(body.get("top_predictions", [])) == 3,
-          r.text[:200])
-    print("     landmarks/cay.json top-3:",
+    check("landmarks/cay.json is recognised as cay", r.status_code == 200 and body.get("label_tr") == "cay",
           [(p["label_tr"], p["confidence"]) for p in body.get("top_predictions", [])])
+
+    # The avatar recordings come from AUTSL training videos, so this checks the
+    # input pipeline end to end, not accuracy on new signers.
+    model_glosses = {entry["TR"] for entry in backend.LABEL_MAP.values()}
+    recordings = sorted(p for p in (ROOT / "landmarks").glob("*.json") if p.stem in model_glosses)
+    correct = 0
+    for path in recordings:
+        window = resample_window(landmark_vectors(path), 16)
+        reply = client.post("/api/predict/sequence", headers=U, json={"landmarks": window.tolist()}).json()
+        correct += int(reply.get("label_tr") == path.stem)
+    share = correct / max(len(recordings), 1)
+    print(f"     avatar recordings of the 179 model classes: top-1 {correct}/{len(recordings)} ({share:.1%})")
+    check("pipeline matches training on the avatar recordings", len(recordings) == 179 and share >= 0.85, share)
     r = client.post("/api/predict/sequence", headers=U, json={"landmarks": [[0.0] * 126] * 20})
     check("sequence of the wrong length rejected", r.status_code == 400)
 

@@ -4,7 +4,7 @@ The browser streams frames into a capture window (32 frames by default).
 When the window is full it is resampled to the model's fixed input length
 (16 frames) and turned into 156 features per frame:
 
-    126 hand coordinates (left 63 + right 63)
+    126 hand coordinates (signer's left hand 63 + right hand 63)
       → wrist-relative, scale-normalized coordinates
       → + 30 finger-joint angles
       → z-score normalization
@@ -12,9 +12,26 @@ When the window is full it is resampled to the model's fixed input length
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Iterable, Optional, Sequence, Tuple
 
 import numpy as np
+
+# MediaPipe labels handedness as if the image were mirrored, so on an
+# unmirrored camera frame its "Right" hand is the signer's left hand. The model
+# was trained with the signer's left hand first.
+TRAINING_HAND_ORDER = ("Right", "Left")
+
+
+def hands_to_landmarks(hands: Iterable[Tuple[str, np.ndarray]]) -> np.ndarray:
+    """126 values in the training layout from (MediaPipe label, 21x3 points) pairs.
+
+    Expects an unmirrored frame. A missing hand stays zero.
+    """
+    slots = {label: np.zeros(63, dtype=np.float32) for label in TRAINING_HAND_ORDER}
+    for label, points in hands:
+        if label in slots and points is not None:
+            slots[label] = np.asarray(points, dtype=np.float32).reshape(63)
+    return np.concatenate([slots[label] for label in TRAINING_HAND_ORDER])
 
 
 def hand_is_present(hand_vector: np.ndarray, minimum_norm: float) -> bool:

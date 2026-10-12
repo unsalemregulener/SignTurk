@@ -33,6 +33,7 @@ import models
 from text_processing.lexicon import restore_turkish, restore_turkish_words
 from live_pipeline import (
     count_detected_hands as count_live_hands,
+    hands_to_landmarks,
     preprocess_sequence as preprocess_live_sequence,
     resample_window,
 )
@@ -298,7 +299,7 @@ def load_landmark_index():
 #  PREPROCESSING
 # ═══════════════════════════════════════════════════════════
 def extract_landmarks_from_frame(frame: np.ndarray, mirror: bool = False) -> Optional[np.ndarray]:
-    """Return 126 hand coordinates (left 63 + right 63) for one BGR frame."""
+    """Return 126 hand coordinates in the training layout for one BGR frame."""
     if MP_HANDS is None:
         return None
     try:
@@ -306,18 +307,12 @@ def extract_landmarks_from_frame(frame: np.ndarray, mirror: bool = False) -> Opt
             frame = cv2.flip(frame, 1)
         rgb = np.ascontiguousarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         results = MP_HANDS.process(rgb)
-        left_lm = np.zeros(63, dtype=np.float32)
-        right_lm = np.zeros(63, dtype=np.float32)
+        hands = []
         if results.multi_hand_landmarks and results.multi_handedness:
             for hl, hand in zip(results.multi_hand_landmarks, results.multi_handedness):
-                label = hand.classification[0].label
-                coords = np.array([[lm.x, lm.y, lm.z] for lm in hl.landmark],
-                                   dtype=np.float32).flatten()
-                if label == "Left":
-                    left_lm = coords
-                else:
-                    right_lm = coords
-        return np.concatenate([left_lm, right_lm])
+                hands.append((hand.classification[0].label,
+                              [[lm.x, lm.y, lm.z] for lm in hl.landmark]))
+        return hands_to_landmarks(hands)
     except Exception as e:
         logger.error(f"[MEDIAPIPE] Frame error: {e}")
         return np.zeros(126, dtype=np.float32)

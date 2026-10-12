@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from live_pipeline import count_detected_hands, preprocess_sequence, resample_window
+from live_pipeline import count_detected_hands, hands_to_landmarks, preprocess_sequence, resample_window
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,6 +33,17 @@ class PreprocessingTests(unittest.TestCase):
         features = preprocess_sequence(resample_window(window, 16), np.zeros(156), np.ones(156))
         self.assertEqual(features.shape, (1, 16, 156))
         self.assertTrue(np.isfinite(features).all())
+
+    def test_hands_follow_training_order(self):
+        signer_left = np.full((21, 3), 0.2, dtype=np.float32)
+        signer_right = np.full((21, 3), 0.8, dtype=np.float32)
+        # On an unmirrored frame MediaPipe calls the signer's left hand "Right".
+        vector = hands_to_landmarks([("Left", signer_right), ("Right", signer_left)])
+        np.testing.assert_array_equal(vector[:63], signer_left.reshape(63))
+        np.testing.assert_array_equal(vector[63:], signer_right.reshape(63))
+        only_one = hands_to_landmarks([("Left", signer_right)])
+        self.assertFalse(only_one[:63].any())
+        self.assertEqual(hands_to_landmarks([]).shape, (126,))
 
     def test_detected_hand_count(self):
         landmarks = np.zeros(126, dtype=np.float32)
