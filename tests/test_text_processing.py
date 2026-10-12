@@ -56,6 +56,7 @@ class SignLexiconTests(unittest.TestCase):
             ("biz", "gulmek"): "Biz gülüyoruz.",
             ("ben", "ozur_dilemek"): "Ben özür diliyorum.",
             ("ben", "kopek", "sevmek"): "Ben köpeği seviyorum.",
+            ("ben", "cay", "icmek"): "Ben çay içiyorum.",
             ("onlar", "aglamak"): "Onlar ağlıyorlar.",
             ("ben", "ogretmen"): "Ben öğretmenim.",
         }

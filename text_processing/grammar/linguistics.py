@@ -192,14 +192,13 @@ _ABLATION_VERBS = {
 }
 # Transitive verbs that govern an accusative-marked complement.
 # NOTE: high-frequency "indefinite-object" verbs (istemek, okumak,
-# görmek, almak, yemek) are deliberately *excluded* here. Sign-language
-# input is article-less, and applying the accusative to those verbs
-# yields stilted output like "Ben kitabı okuyorum." where the natural
-# reading is the indefinite "Ben kitap okuyorum." (belirtisiz nesne,
-# §4.2.3-B). Add a verb back if you want the definite reading.
+# görmek, almak, yemek, içmek) are deliberately *excluded* here.
+# Sign-language input is article-less, and applying the accusative to
+# those verbs yields stilted output like "Ben kitabı okuyorum." where the
+# natural reading is the indefinite "Ben kitap okuyorum." (belirtisiz
+# nesne, §4.2.3-B). Add a verb back if you want the definite reading.
 _TRANSITIVE_VERBS = {
     "yazmak",
-    "içmek",
     "vermek",
     "sevmek",
     "anlamak",

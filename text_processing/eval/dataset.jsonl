@@ -8,7 +8,7 @@
 {"words": ["ben", "iş", "durmak"], "expected": "Ben işte duruyorum.", "tags": ["locative", "1s", "hardening"]}
 {"words": ["ben", "ev", "çıkmak"], "expected": "Ben evden çıkıyorum.", "tags": ["ablative", "1s"]}
 {"words": ["o", "iş", "ayrılmak"], "expected": "O işten ayrılıyor.", "tags": ["ablative", "3s", "hardening"]}
-{"words": ["ben", "su", "içmek"], "expected": "Ben suyu içiyorum.", "tags": ["accusative", "1s"]}
+{"words": ["ben", "su", "içmek"], "expected": "Ben su içiyorum.", "tags": ["indefinite", "1s"]}
 {"words": ["ben", "kitap", "yazmak"], "expected": "Ben kitabı yazıyorum.", "tags": ["accusative", "1s", "softening"]}
 {"words": ["ben", "kitap", "okumak"], "expected": "Ben kitap okuyorum.", "tags": ["indefinite", "1s"]}
 {"words": ["ben", "su", "istemek"], "expected": "Ben su istiyorum.", "tags": ["indefinite", "1s", "intent"]}
@@ -24,7 +24,7 @@
 {"words": ["sen", "gitmek", "okul"], "expected": "Sen okula gidiyorsun.", "tags": ["sov_inverted", "dative", "2s"]}
 {"words": ["sevmek", "sen", "ben"], "expected": "Sen beni seviyorsun.", "tags": ["sov_inverted", "accusative", "2s"]}
 {"words": ["ben", "gelmek", "istemek"], "expected": "Ben gelmek istiyorum.", "tags": ["complement_verb", "1s", "intent"]}
-{"words": ["merhaba", "ben", "su", "içmek"], "expected": "Merhaba, ben suyu içiyorum.", "tags": ["greeting", "accusative", "1s"]}
+{"words": ["merhaba", "ben", "su", "içmek"], "expected": "Merhaba, ben su içiyorum.", "tags": ["greeting", "indefinite", "1s"]}
 {"words": ["merhaba", "ben", "su", "istemek"], "expected": "Merhaba, ben su istiyorum.", "tags": ["greeting", "indefinite", "1s", "intent"]}
 {"words": ["sen", "gelmek", "mi"], "expected": "Sen geliyor musun?", "tags": ["question", "2s"]}
 {"words": ["ben", "gelmek", "mi"], "expected": "Ben geliyor muyum?", "tags": ["question", "1s"]}
@@ -52,9 +52,9 @@
 {"words": ["sen", "ev", "beklemek"], "expected": "Sen evde bekliyorsun.", "tags": ["locative", "2s"]}
 {"words": ["o", "ev", "beklemek"], "expected": "O evde bekliyor.", "tags": ["locative", "3s"]}
 {"words": ["biz", "ev", "beklemek"], "expected": "Biz evde bekliyoruz.", "tags": ["locative", "1p"]}
-{"words": ["sen", "su", "içmek"], "expected": "Sen suyu içiyorsun.", "tags": ["accusative", "2s"]}
-{"words": ["o", "su", "içmek"], "expected": "O suyu içiyor.", "tags": ["accusative", "3s"]}
-{"words": ["biz", "su", "içmek"], "expected": "Biz suyu içiyoruz.", "tags": ["accusative", "1p"]}
+{"words": ["sen", "su", "içmek"], "expected": "Sen su içiyorsun.", "tags": ["indefinite", "2s"]}
+{"words": ["o", "su", "içmek"], "expected": "O su içiyor.", "tags": ["indefinite", "3s"]}
+{"words": ["biz", "su", "içmek"], "expected": "Biz su içiyoruz.", "tags": ["indefinite", "1p"]}
 {"words": ["sen", "kitap", "okumak"], "expected": "Sen kitap okuyorsun.", "tags": ["indefinite", "2s"]}
 {"words": ["o", "kitap", "okumak"], "expected": "O kitap okuyor.", "tags": ["indefinite", "3s"]}
 {"words": ["biz", "kitap", "okumak"], "expected": "Biz kitap okuyoruz.", "tags": ["indefinite", "1p"]}
@@ -86,8 +86,8 @@
 {"words": ["sen", "ev", "çıkmak"], "expected": "Sen evden çıkıyorsun.", "tags": ["ablative", "2s"]}
 {"words": ["o", "okul", "ayrılmak"], "expected": "O okuldan ayrılıyor.", "tags": ["ablative", "3s"]}
 {"words": ["ben", "iş", "çıkmak"], "expected": "Ben işten çıkıyorum.", "tags": ["ablative", "1s"]}
-{"words": ["ben", "çay", "içmek"], "expected": "Ben çayı içiyorum.", "tags": ["accusative", "1s"]}
-{"words": ["sen", "çay", "içmek"], "expected": "Sen çayı içiyorsun.", "tags": ["accusative", "2s"]}
+{"words": ["ben", "çay", "içmek"], "expected": "Ben çay içiyorum.", "tags": ["indefinite", "1s"]}
+{"words": ["sen", "çay", "içmek"], "expected": "Sen çay içiyorsun.", "tags": ["indefinite", "2s"]}
 {"words": ["o", "et", "yemek"], "expected": "O et yiyor.", "tags": ["indefinite", "3s"]}
 {"words": ["biz", "kitap", "yazmak"], "expected": "Biz kitabı yazıyoruz.", "tags": ["accusative", "1p"]}
 {"words": ["sen", "kitap", "yazmak"], "expected": "Sen kitabı yazıyorsun.", "tags": ["accusative", "2s"]}
