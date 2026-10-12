@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from database import engine, get_db, Base, database_name
 import models
+from text_processing.lexicon import restore_turkish, restore_turkish_words
 from live_pipeline import (
     count_detected_hands as count_live_hands,
     preprocess_sequence as preprocess_live_sequence,
@@ -338,11 +339,14 @@ def get_label(model_index: int) -> Dict[str, Any]:
     key = str(model_index)
     if key in LABEL_MAP:
         e = LABEL_MAP[key]
+        gloss = e.get("TR", f"class_{model_index}")
         return {"class_id": model_index,
-                "label_tr": e.get("TR", f"class_{model_index}"),
+                "label_tr": gloss,
+                "text_tr": restore_turkish(gloss),
                 "label_en": e.get("EN", f"class_{model_index}")}
     return {"class_id": model_index,
             "label_tr": f"class_{model_index}",
+            "text_tr": f"class_{model_index}",
             "label_en": f"class_{model_index}"}
 
 
@@ -364,6 +368,7 @@ def run_inference(input_tensor):
     return {
         "class_id": best_lbl["class_id"],
         "label_tr": best_lbl["label_tr"],
+        "text_tr": best_lbl["text_tr"],
         "label_en": best_lbl["label_en"],
         "confidence": best_conf,
         "animation_key": best_lbl["label_tr"].lower() if best_lbl["label_tr"].lower() in LANDMARK_INDEX else "none",
@@ -544,8 +549,8 @@ except Exception as e:
 
 
 def assemble_sentence(words: List[str]) -> str:
-    """Build a Turkish sentence from approved sign words (rule-based engine)."""
-    cleaned = [w for w in (words or []) if w and str(w).strip()]
+    """Build a Turkish sentence from approved sign glosses (rule-based engine)."""
+    cleaned = restore_turkish_words(w for w in (words or []) if w and str(w).strip())
     if not cleaned:
         return ""
     if len(cleaned) < 2:
@@ -612,7 +617,8 @@ async def health():
 @app.get("/signs")
 async def list_signs():
     """List every word that has a landmark sequence."""
-    return {"words": sorted(LANDMARK_INDEX.keys()), "count": len(LANDMARK_INDEX)}
+    words = sorted(LANDMARK_INDEX.keys())
+    return {"words": words, "labels": {w: restore_turkish(w) for w in words}, "count": len(words)}
 
 @app.get("/landmark/{word}")
 async def get_landmark(word: str):
@@ -740,6 +746,7 @@ async def live_predict(websocket: WebSocket):
                         await websocket.send_json({
                             "type": "sentence_update",
                             "words": list(sentence_words),
+                            "display_words": restore_turkish_words(sentence_words),
                             "sentence": assemble_sentence(sentence_words),
                             "added": word or None,
                         })
@@ -753,6 +760,7 @@ async def live_predict(websocket: WebSocket):
                         await websocket.send_json({
                             "type": "sentence_update",
                             "words": list(sentence_words),
+                            "display_words": restore_turkish_words(sentence_words),
                             "sentence": assemble_sentence(sentence_words),
                         })
                     elif action in ("reset_sentence", "clear_sentence"):
@@ -760,7 +768,7 @@ async def live_predict(websocket: WebSocket):
                         last_candidate = None
                         last_candidate_conf = None
                         await websocket.send_json({
-                            "type": "sentence_update", "words": [], "sentence": "",
+                            "type": "sentence_update", "words": [], "display_words": [], "sentence": "",
                         })
                     continue
                 if "landmarks" in payload:
@@ -837,6 +845,7 @@ async def live_predict(websocket: WebSocket):
                 "class_id": prediction["class_id"],
                 "label_tr": prediction["label_tr"] if prediction["above_threshold"]
                             else f"({prediction['label_tr']}?)",
+                "text_tr": prediction["text_tr"],
                 "label_en": prediction["label_en"],
                 "confidence": prediction["confidence"],
                 "animation_key": prediction["animation_key"],
@@ -855,6 +864,7 @@ async def live_predict(websocket: WebSocket):
                 last_candidate = prediction["label_tr"]
                 last_candidate_conf = prediction["confidence"]
             result["pending_word"] = last_candidate
+            result["pending_text"] = restore_turkish(last_candidate) if last_candidate else None
 
             await websocket.send_json(result)
             buf.keep_tail(LIVE_BUFFER_STRIDE)
@@ -889,7 +899,7 @@ async def predict_sequence(payload: Dict[str, Any], _user=Depends(current_user))
 # ═══════════════════════════════════════════════════════════
 def _history_row(r: "models.History") -> Dict[str, Any]:
     return {"id": r.id, "session_id": r.session_id, "mode": r.mode,
-            "result": r.result, "confidence": r.confidence,
+            "result": r.result, "text": restore_turkish(r.result), "confidence": r.confidence,
             "created_at": iso_time(r.created_at)}
 
 
@@ -953,8 +963,8 @@ def save_settings(data: SettingsData, db: Session = Depends(get_db), user=Depend
 def _dictionary_entry(class_id: int) -> Dict[str, Any]:
     info = get_label(class_id)
     key = info["label_tr"].lower()
-    return {"class_id": class_id, "tr": info["label_tr"], "en": info["label_en"],
-            "animation_key": key if key in LANDMARK_INDEX else None}
+    return {"class_id": class_id, "tr": info["label_tr"], "text": info["text_tr"],
+            "en": info["label_en"], "animation_key": key if key in LANDMARK_INDEX else None}
 
 @app.get("/api/dictionary")
 async def get_dictionary():

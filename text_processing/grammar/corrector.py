@@ -151,7 +151,7 @@ class MLGrammarCorrector:
             return None, MLError(
                 "timeout",
                 f"ML çıkarımı çok yavaş ({elapsed_ms / 1000:.1f}s > "
-                f"{timeout_s:.0f}s eşiği) — daha küçük/baŧka bir model deneyin.",
+                f"{timeout_s:.0f}s eşiği) — daha küçük/başka bir model deneyin.",
             )
         return text, None
 
@@ -275,12 +275,13 @@ class GrammarCorrector:
             "grammar decision %s",
             json.dumps(
                 {
-                    "input_words": rec.input_words,
+                    # Counts only: the words people sign are not written to the log
+                    "input_word_count": len(rec.input_words),
                     "model_key": rec.model_key,
                     "prompt_version": rec.prompt_version,
                     "source": rec.source,
-                    "final_sentence": rec.final_sentence,
-                    "rejected_candidate": rec.rejected_candidate,
+                    "output_character_count": len(rec.final_sentence),
+                    "candidate_rejected": rec.rejected_candidate is not None,
                     "rejection_reason": rec.rejection_reason,
                     "ml_error_category": rec.ml_error_category,
                     "ml_latency_ms": round(rec.ml_latency_ms, 1),

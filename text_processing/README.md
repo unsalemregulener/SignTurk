@@ -1,77 +1,71 @@
 # text_processing
 
-Turns a stream of recognized sign-gloss words into fluent, grammatical
-Turkish (and optional speech). A deterministic **rule-based engine** is the
-reliable primary; an optional **ML layer** (HF Inference API or local
+Turns the stream of approved sign glosses into a grammatical Turkish
+sentence (and optional speech). A deterministic **rule-based engine** is the
+primary path; an optional **ML layer** (Hugging Face Inference API or local
 transformers) proposes a candidate that is validated and arbitrated against
 the rule-based output per request.
 
 ## Architecture
 
-Dependencies point inward — pure domain at the centre, I/O at the edges.
+Dependencies point inward: pure domain at the centre, I/O at the edges.
 
 ```
-buffer ─▶ pipeline ─▶ grammar ─▶ tts
-                        │
-        web (FastAPI) ──┘   (text_processing_routes.py = thin shim)
+glosses ─▶ lexicon ─▶ pipeline ─▶ grammar ─▶ tts
+                                    │
+                    web (FastAPI) ──┘
 ```
 
-### `grammar/` (was a single ~2000-line module)
+| module | responsibility |
+| --- | --- |
+| `lexicon` | Turkish spelling of the 226 AUTSL glosses (`cay` → `çay`, `afiyet_olsun` → `afiyet olsun`) |
+| `buffer` | word buffer with silence detection |
+| `pipeline` | `SignTextPipeline`: words in, sentence (+ optional audio) out; waits for at least two words |
+| `grammar/linguistics` | Turkish phonology and morphology, no I/O |
+| `grammar/rules` | `RuleBasedCorrector`: SOV order, case suffixes, present continuous, copula (`ben evli` → `Ben evliyim.`) |
+| `grammar/registry` | `ModelSpec`, `MODEL_REGISTRY`, `GrammarConfig` |
+| `grammar/prompts` | versioned zero-shot prompt templates |
+| `grammar/validation` | sanity checks on ML candidates |
+| `grammar/adapters` | model backends and ML error classification |
+| `grammar/arbiter` | per-request ML-vs-rule comparison |
+| `grammar/telemetry` | in-process decision log for the health endpoint |
+| `grammar/corrector` | `GrammarCorrector`, the public hybrid facade |
+| `tts` | gTTS with an optional offline Piper fallback |
+| `web/` | Pydantic schemas, bounded pipeline cache, async job store and the `/api/text/*` routers |
 
-| module          | responsibility                                            |
-| --------------- | --------------------------------------------------------- |
-| `linguistics`   | Turkish phonology & morphology — pure domain, no I/O      |
-| `registry`      | `ModelSpec` / `MODEL_REGISTRY` / `GrammarConfig`          |
-| `prompts`       | versioned zero-shot prompt templates                      |
-| `validation`    | sanity checks on ML candidate sentences                   |
-| `rules`         | `RuleBasedCorrector` — the primary engine                 |
-| `adapters`      | model backends + `_classify_ml_error`                     |
-| `arbiter`       | per-request ML-vs-rule quality comparator                 |
-| `telemetry`     | in-process decision log (health endpoint)                 |
-| `corrector`     | `GrammarCorrector` — the public hybrid facade             |
-
-`grammar/__init__.py` re-exports the full public API, so
-`from text_processing.grammar import …` is unchanged.
-
-### `web/` (was the root-level `text_processing_routes.py`)
-
-`schemas` (Pydantic) · `cache` (bounded LRU+TTL pipeline cache) ·
-`jobs` (async job store + worker pool) · `router` (the `/api/text/*`
-endpoints). The root `text_processing_routes.py` is now a thin
-backward-compatible shim (`from text_processing_routes import router`).
-
-## ML observability
-
-ML failures are no longer swallowed into a bare fallback. Each failure is
-classified (`quota` / `auth` / `not_served` / `rate_limit` / `timeout` /
-`network` / `deps` …) and surfaced as an actionable Turkish message on
-`GrammarResult.ml_error` → `CorrectResponse.ml_error`. `POST /api/text/ping`
-probes a model's connectivity before a real correction.
+The live application maps glosses through `lexicon` before calling the
+engine. Free text sent to `/api/text/correct` is used as is, because a few
+glosses are also ordinary words with another meaning (`gol`, `sinir`, `hali`).
 
 ## Conventions
 
-- **Code and docstrings are written in English.**
-- **User-facing strings are Turkish** — UI copy, model `notes`, and the
-  `ml_error` / `ping` messages a user reads.
-- The rule-based engine is the safe floor and the fallback for every ML
-  error path; it is never removed.
+- Code and docstrings are written in English.
+- User-facing strings (interface, `ml_error` and `ping` messages) are Turkish.
+- The rule-based engine is the floor and the fallback for every ML error; it
+  is never removed.
+- The decision log records counts, not the signed words.
 
-## Dev workflow
-
-No heavy ML/CV deps needed — tests stub them.
+## Validation
 
 ```bash
-pip install fastapi pydantic            # light runtime deps
-python -m unittest discover -s tests    # 242 tests, no network/weights
+python -m unittest discover -s tests -v
 python -m text_processing.eval --check --min-exact 0.98   # rule-based floor
-
-pip install ruff mypy
-ruff check text_processing tests text_processing_routes.py
-ruff format --check text_processing tests text_processing_routes.py
-mypy text_processing
-
-python -m text_processing.devserver     # standalone test UI at http://127.0.0.1:8000
 ```
 
-Lint/format/type config lives in `pyproject.toml`; CI runs the same checks
-(`.github/workflows/text-processing-ci.yml`).
+To try the API without TensorFlow, MediaPipe or a camera:
+
+```bash
+python -m text_processing.devserver   # http://127.0.0.1:8000/docs
+```
+
+## Known limitations
+
+- Question words do not get a question mark (`siz nasıl` → `Siz nasılsınız.`).
+- Some verbs miss the locative (`ben hastane çalışmak` → `Ben hastane çalışıyorum.`).
+- Pronoun objects are not always put in the accusative (`sen o görmek` →
+  `Sen o görüyorsun.`).
+- Loanword final stops are softened (`market` + dative → `markede`).
+- Proper nouns are lowercased and suffixed like common nouns (`ben Atatürk
+  sevmek` → `Ben atatürğü seviyorum.` instead of `Ben Atatürk'ü seviyorum.`).
+- The optional local ML stack must use transformers ≥ 4.48, torch ≥ 2.6 and
+  sentencepiece ≥ 0.2.1; older releases have published CVEs.

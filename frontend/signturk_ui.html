@@ -872,7 +872,7 @@ function Dashboard({navigate, health}){
           <div className="panel-body">
             {history.length === 0 ? <div className="empty">Henüz kayıt yok.</div> : (
               <div className="transcript">
-                {history.map((h,i) => <div className="transcript-item" key={h.id ?? i}><strong>{h.result || "-"}</strong><span className="chip">{h.confidence || "-"}</span></div>)}
+                {history.map((h,i) => <div className="transcript-item" key={h.id ?? i}><strong>{h.text || h.result || "-"}</strong><span className="chip">{h.confidence || "-"}</span></div>)}
               </div>
             )}
           </div>
@@ -1015,11 +1015,12 @@ function LivePage(){
     if (data?.class_id === -1) return;
     predictionHoldUntilRef.current = Date.now() + 1000;
     setPrediction(data);
-    const label = data?.label_tr || "";
+    // Glosses are ASCII ("cay"); text_tr is the Turkish spelling ("çay")
+    const label = data?.text_tr || data?.label_tr || "";
     const confident = data?.class_id !== -1 && data?.above_threshold !== false && Number(data?.confidence || 0) >= Number(data?.threshold || .4);
     if (!confident || !label) return;
     const clean = label.replace(/[()]/g,"").replace("?","").trim();
-    if (data?.pending_word) setPending({word:data.pending_word, label_en:data.label_en || ""});
+    if (data?.pending_word) setPending({word:data.pending_word, text:data.pending_text || data.pending_word, label_en:data.label_en || ""});
     const now = Date.now();
     if (lastCommitRef.current.label === clean && now - lastCommitRef.current.at < 1800) return;
     lastCommitRef.current = {label:clean, at:now};
@@ -1063,12 +1064,12 @@ function LivePage(){
         try{
           const data = JSON.parse(event.data);
           if (data.type === "sentence_update"){
-            setSentenceWords(Array.isArray(data.words) ? data.words : []);
+            setSentenceWords(Array.isArray(data.display_words) ? data.display_words : (Array.isArray(data.words) ? data.words : []));
             setSentence(data.sentence || "");
             setPending(null);
             setStatus("Cümle güncellendi");
             // Only approved words are spoken: the sentence once it has two words, otherwise the word.
-            if (data.added) speak(data.sentence || data.added);
+            if (data.added) speak(data.sentence || (data.display_words || []).slice(-1)[0] || data.added);
             return;
           }
           if (data.type === "rejected"){
@@ -1102,7 +1103,10 @@ function LivePage(){
   const bufferPct = Math.max(0, Math.min(100, Math.round((bufferLen / windowLen) * 100)));
   const hasPrediction = prediction && prediction.class_id !== -1;
   const confPct = hasPrediction ? Math.round(Number(prediction?.confidence || 0) * 100) : 0;
-  const displayLabel = hasPrediction ? prediction.label_tr : (running ? "Toplanıyor" : "Hazır");
+  const predictedText = hasPrediction ? (prediction.text_tr || prediction.label_tr) : "";
+  const displayLabel = hasPrediction
+    ? (prediction.above_threshold === false ? `(${predictedText}?)` : predictedText)
+    : (running ? "Toplanıyor" : "Hazır");
   const displaySub = hasPrediction
     ? `${prediction?.label_en || "SIGNTURK"} · class ${prediction?.class_id ?? "-"}`
     : (streamMeta?.label_tr || status);
@@ -1166,7 +1170,7 @@ function LivePage(){
             </div>
             {pending && running && (
               <div className="transcript-item" style={{marginTop:14,alignItems:"center"}}>
-                <div><strong>{pending.word}</strong><span style={{display:"block",color:"var(--muted)",fontSize:12}}>Onay bekliyor</span></div>
+                <div><strong>{pending.text || pending.word}</strong><span style={{display:"block",color:"var(--muted)",fontSize:12}}>Onay bekliyor</span></div>
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                   <button className="btn green" onClick={approveWord}><Icon name="Check"/> Doğru</button>
                   <button className="btn red" onClick={rejectWord}><Icon name="X"/> Yanlış</button>
@@ -1200,7 +1204,7 @@ function LivePage(){
                 {prediction.top_predictions.map((p,i) => (
                   <div className="top-row" key={i}>
                     <div className="rank">{i+1}</div>
-                    <div><strong>{p.label_tr || p.TR || "-"}</strong><span>{p.label_en || p.EN || `class ${p.class_id}`}</span></div>
+                    <div><strong>{p.text_tr || p.label_tr || "-"}</strong><span>{p.label_en || p.EN || `class ${p.class_id}`}</span></div>
                     <strong>{percent(p.confidence)}</strong>
                   </div>
                 ))}
@@ -1228,13 +1232,13 @@ function DictionaryPage(){
   useEffect(() => {
     apiFetch(API.endpoints.dictionary).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => setRows([]));
   }, []);
-  const filtered = rows.filter(r => `${r.tr || r.TR || ""} ${r.en || r.EN || ""} ${r.class_id || ""}`.toLowerCase().includes(search.toLowerCase()));
+  const filtered = rows.filter(r => `${r.text || ""} ${r.tr || ""} ${r.en || ""} ${r.class_id ?? ""}`.toLocaleLowerCase("tr-TR").includes(search.toLocaleLowerCase("tr-TR")));
   return (
     <section className="panel">
       <div className="panel-head"><div><h3>SIGNTURK Sözlük</h3><span>{filtered.length} etiket</span></div><div className="field" style={{width:280}}><input className="input" placeholder="Ara" value={search} onChange={e => setSearch(e.target.value)} /></div></div>
       <div className="table-wrap">
         <table><thead><tr><th>Sınıf</th><th>Türkçe</th><th>İngilizce</th><th>Anahtar</th></tr></thead>
-          <tbody>{filtered.map((r,i) => <tr key={i}><td className="mono">{r.class_id ?? r.id ?? i}</td><td>{r.tr || r.TR || r.label_tr || "-"}</td><td>{r.en || r.EN || r.label_en || "-"}</td><td className="mono">{r.animation_key || "-"}</td></tr>)}</tbody>
+          <tbody>{filtered.map((r,i) => <tr key={i}><td className="mono">{r.class_id ?? r.id ?? i}</td><td>{r.text || r.tr || "-"}</td><td>{r.en || r.EN || r.label_en || "-"}</td><td className="mono">{r.animation_key || "-"}</td></tr>)}</tbody>
         </table>
       </div>
     </section>
@@ -1253,7 +1257,7 @@ function HistoryPage(){
       {loading ? <div className="empty">Yükleniyor.</div> : rows.length === 0 ? <div className="empty">Kayıt bulunamadı.</div> : (
         <div className="table-wrap">
           <table><thead><tr><th>Zaman</th><th>Mod</th><th>Sonuç</th><th>Güven</th><th>Oturum</th></tr></thead>
-            <tbody>{rows.map((r,i) => <tr key={r.id ?? i}><td>{r.created_at ? new Date(r.created_at).toLocaleString("tr-TR") : "-"}</td><td>{r.mode || "-"}</td><td>{r.result || "-"}</td><td>{r.confidence || "-"}</td><td className="mono">{r.session_id || "-"}</td></tr>)}</tbody>
+            <tbody>{rows.map((r,i) => <tr key={r.id ?? i}><td>{r.created_at ? new Date(r.created_at).toLocaleString("tr-TR") : "-"}</td><td>{r.mode || "-"}</td><td>{r.text || r.result || "-"}</td><td>{r.confidence || "-"}</td><td className="mono">{r.session_id || "-"}</td></tr>)}</tbody>
           </table>
         </div>
       )}
@@ -1340,12 +1344,13 @@ function signTier(w){ const r = signRank(w); return r < 56 ? 'iyi' : r < 124 ? '
 
 function Avatar3DPage(){
   const [words, setWords] = useState([]);
+  const [labels, setLabels] = useState({});
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState("");
   const iframeRef = useRef(null);
   const avatarSpeedRef = useRef(1);
   useEffect(() => {
-    apiFetch(API.endpoints.signs).then(d => setWords(d.words || [])).catch(() => setWords([]));
+    apiFetch(API.endpoints.signs).then(d => { setWords(d.words || []); setLabels(d.labels || {}); }).catch(() => setWords([]));
     apiFetch(API.endpoints.settings).then(s => {
       avatarSpeedRef.current = Number(s?.avatar_speed) || 1;
       sendSpeed();
@@ -1357,11 +1362,11 @@ function Avatar3DPage(){
   const play = (word) => {
     setSelected(word);
     // avatar3d.html only reacts to messages of type "play_sign"
-    iframeRef.current?.contentWindow?.postMessage({type:"play_sign", word}, window.location.origin);
+    iframeRef.current?.contentWindow?.postMessage({type:"play_sign", word, label:labels[word] || word}, window.location.origin);
   };
   // Ordered by playback quality (good → fair → poor), not alphabetically
   const filtered = words
-    .filter(w => w.toLowerCase().includes(search.toLowerCase()))
+    .filter(w => `${w} ${labels[w] || ""}`.toLocaleLowerCase("tr-TR").includes(search.toLocaleLowerCase("tr-TR")))
     .sort((a,b) => signRank(a) - signRank(b) || a.localeCompare(b));
   return (
     <div className="avatar-grid">
@@ -1377,7 +1382,7 @@ function Avatar3DPage(){
               return (
                 <React.Fragment key={w}>
                   {showDiv && <div style={{height:3,background:'#c9a96e',borderRadius:3,margin:'14px 2px',boxShadow:'0 0 8px rgba(201,169,110,.5)'}}/>}
-                  <button className={"word-btn" + (selected===w ? " active" : "")} onClick={() => play(w)}><span>{w}</span><Icon name="Play" size={15}/></button>
+                  <button className={"word-btn" + (selected===w ? " active" : "")} onClick={() => play(w)}><span>{labels[w] || w}</span><Icon name="Play" size={15}/></button>
                 </React.Fragment>
               );
             })}
