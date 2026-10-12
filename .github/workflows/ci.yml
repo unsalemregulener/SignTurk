@@ -27,13 +27,13 @@ jobs:
       - name: Lint
         run: ruff check .
       - name: Compile
-        run: python -m compileall -q backend.py database.py models.py live_pipeline.py landmark_smoother.py text_processing tools tests
+        run: python -m compileall -q backend.py database.py models.py live_pipeline.py live226.py landmark_smoother.py signturk_runtime text_processing tools tests
       - name: Unit tests
         run: python -m unittest discover -s tests -v
       - name: Sentence engine evaluation
         run: python -m text_processing.eval --check --min-exact 0.98
       - name: Model weights are reachable
-        run: python tools/download_models.py --check
+        run: python tools/download_models.py --check --bundle all
 
   backend:
     name: Backend with the real model
@@ -50,7 +50,14 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1
       - name: Install
         run: pip install -r requirements-dev.txt
+      - name: Restore model weights
+        uses: actions/cache@v6
+        with:
+          path: |
+            demo_assets_179/model.keras
+            research/model_226/models
+          key: models-${{ hashFiles('model-assets.json') }}
       - name: Download model weights
-        run: python tools/download_models.py
-      - name: End-to-end check
+        run: python tools/download_models.py --bundle all
+      - name: End-to-end check (179 and 226 models)
         run: python tests/backend_smoke.py

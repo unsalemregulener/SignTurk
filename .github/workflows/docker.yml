@@ -21,18 +21,19 @@ jobs:
         run: docker build -t signturk:ci .
       - name: Start
         run: docker run -d --name signturk -p 8000:8000 signturk:ci
-      - name: Wait until the model and MediaPipe are loaded
+      - name: Wait until both models and MediaPipe are loaded
         run: |
-          for attempt in $(seq 1 60); do
+          for attempt in $(seq 1 120); do
             if curl -fsS http://127.0.0.1:8000/api/health -o health.json; then
-              if python3 -c "import json, sys; h = json.load(open('health.json')); sys.exit(0 if h['model_loaded'] and h['mediapipe_ready'] else 1)"; then
+              if python3 -c "import json, sys; h = json.load(open('health.json')); sys.exit(0 if h['model_loaded'] and h['mediapipe_ready'] and h['model_226']['ready'] else 1)"; then
                 cat health.json
                 exit 0
               fi
             fi
             sleep 5
           done
-          echo "The container did not become ready in 5 minutes"
+          echo "The container did not become ready in 10 minutes"
+          cat health.json || true
           exit 1
       - name: Container logs
         if: always()

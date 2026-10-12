@@ -17,20 +17,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Model weights come from the GitHub release and are checked against model-assets.json
+# Model weights come from the GitHub release and are checked against model-assets.json.
+# MODELS=live builds a smaller image without the 226-class mode.
+ARG MODELS=all
 COPY model-assets.json .
 COPY tools/download_models.py tools/download_models.py
 COPY demo_assets_179/ demo_assets_179/
-RUN python tools/download_models.py
+RUN python tools/download_models.py --bundle ${MODELS}
 
-COPY backend.py database.py models.py live_pipeline.py landmark_smoother.py ./
+COPY backend.py database.py models.py live_pipeline.py live226.py landmark_smoother.py ./
+COPY signturk_runtime/ signturk_runtime/
+COPY research/model_226/config.json research/model_226/config.json
+COPY research/model_226/labels/ research/model_226/labels/
 COPY text_processing/ text_processing/
 COPY frontend/ frontend/
 COPY landmarks/ landmarks/
 
+# The app writes only uploads/ and, without DATABASE_URL, local_dev.db in /app;
+# the model files stay owned by root.
 RUN useradd --create-home --uid 10001 signturk \
     && mkdir -p uploads \
-    && chown -R signturk:signturk /app
+    && chown signturk:signturk /app /app/uploads
 USER signturk
 
 EXPOSE 8000
