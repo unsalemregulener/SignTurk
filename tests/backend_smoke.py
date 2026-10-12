@@ -203,8 +203,11 @@ with TestClient(backend.app) as client:
         print("     skipped the cay recording: it needs the real MediaPipe")
     else:
         frames = camera_frames(ROOT / "docs" / "videos" / "cay.mp4", end=0.6)[::3]
-        vectors = [v for v in (backend.extract_landmarks_from_frame(f) for f in frames)
+        tracker = backend.init_mediapipe()
+        vectors = [v for v in (backend.extract_landmarks_from_frame(f, False, tracker) for f in frames)
                    if v is not None and backend.count_detected_hands(v) > 0]
+        if tracker is not None:
+            tracker.close()
         if len(vectors) >= backend.CAPTURE_WINDOW:
             window = np.stack(vectors[:backend.CAPTURE_WINDOW])
             swapped = np.concatenate([window[:, 63:], window[:, :63]], axis=1)

@@ -302,15 +302,20 @@ def load_landmark_index():
 # ═══════════════════════════════════════════════════════════
 #  PREPROCESSING
 # ═══════════════════════════════════════════════════════════
-def extract_landmarks_from_frame(frame: np.ndarray, mirror: bool = False) -> Optional[np.ndarray]:
-    """Return 126 hand coordinates in the training layout for one BGR frame."""
-    if MP_HANDS is None:
+def extract_landmarks_from_frame(frame: np.ndarray, mirror: bool = False, tracker=None) -> Optional[np.ndarray]:
+    """Return 126 hand coordinates in the training layout for one BGR frame.
+
+    `tracker` is a MediaPipe Hands instance. It follows hands from frame to
+    frame, so every live connection passes its own.
+    """
+    tracker = tracker or MP_HANDS
+    if tracker is None:
         return None
     try:
         if mirror:
             frame = cv2.flip(frame, 1)
         rgb = np.ascontiguousarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        results = MP_HANDS.process(rgb)
+        results = tracker.process(rgb)
         hands = []
         if results.multi_hand_landmarks and results.multi_handedness:
             for hl, hand in zip(results.multi_hand_landmarks, results.multi_handedness):
@@ -792,6 +797,9 @@ async def live_predict(websocket: WebSocket):
     buf = FrameBuffer(seq_len=CAPTURE_WINDOW)
     missed_hand_frames = 0
     session = SentenceSession(db, user_id, mode="Live")
+    # MediaPipe tracks hands across frames, so each connection gets its own
+    # tracker; frame work runs in a thread to keep other connections moving.
+    tracker = await asyncio.to_thread(init_mediapipe) if MP_HANDS is not None else None
     try:
         while True:
             incoming = await websocket.receive_text()
@@ -826,7 +834,7 @@ async def live_predict(websocket: WebSocket):
                     await websocket.send_json({"class_id": -1, "label_tr": "-",
                         "label_en": "-", "confidence": 0, "animation_key": "none"})
                     continue
-                landmarks = extract_landmarks_from_frame(frame, mirror=mirror_frame)
+                landmarks = await asyncio.to_thread(extract_landmarks_from_frame, frame, mirror_frame, tracker)
                 if landmarks is None:
                     await websocket.send_json({"class_id": -1,
                         "label_tr": "MediaPipe kullanılamıyor",
@@ -871,7 +879,7 @@ async def live_predict(websocket: WebSocket):
                     "confidence": 0, "animation_key": "none"})
                 continue
 
-            prediction = run_best_inference(sequence)
+            prediction = await asyncio.to_thread(run_best_inference, sequence)
             if prediction is None:
                 continue
 
@@ -906,6 +914,8 @@ async def live_predict(websocket: WebSocket):
         logger.error(f"[WS-LIVE] Error: {e}\n{traceback.format_exc()}")
         add_log_db(db, "Warning", f"Canlı akış hatası: {e}", user_email)
     finally:
+        if tracker is not None:
+            tracker.close()
         db.close()
 
 
