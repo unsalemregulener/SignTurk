@@ -23,7 +23,7 @@ COPY tools/download_models.py tools/download_models.py
 COPY demo_assets_179/ demo_assets_179/
 RUN python tools/download_models.py
 
-COPY backend.py database.py models.py landmark_smoother.py ./
+COPY backend.py database.py models.py live_pipeline.py landmark_smoother.py ./
 COPY text_processing/ text_processing/
 COPY frontend/ frontend/
 COPY landmarks/ landmarks/
