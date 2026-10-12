@@ -25,7 +25,7 @@ COPY tools/download_models.py tools/download_models.py
 COPY demo_assets_179/ demo_assets_179/
 RUN python tools/download_models.py --bundle ${MODELS}
 
-COPY backend.py database.py models.py live_pipeline.py live226.py landmark_smoother.py ./
+COPY backend.py database.py models.py live_pipeline.py live226.py landmark_smoother.py rate_limit.py ./
 COPY signturk_runtime/ signturk_runtime/
 COPY research/model_226/config.json research/model_226/config.json
 COPY research/model_226/labels/ research/model_226/labels/

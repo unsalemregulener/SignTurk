@@ -127,6 +127,7 @@ Settings are read from the environment or from a `.env` file
 | `ALLOWED_ORIGINS` | `http://localhost:8000,http://127.0.0.1:8000` | browser origins allowed by CORS |
 | `SIGNTURK_ADMIN_EMAIL`, `SIGNTURK_ADMIN_PASSWORD` | empty | first administrator, created at startup; the password needs at least 8 characters |
 | `SIGNTURK_ADMIN_NAME` | `SignTurk Admin` | display name of that account |
+| `SIGNTURK_TOKEN_HOURS` | `12` | how long a sign-in stays valid |
 | `SIGNTURK_ENABLE_226` | `1` | `0` skips loading the full mode |
 | `SIGNTURK_226_DETECT_EVERY` | `1` | run the person detector on every Nth frame of a clip and reuse its box in between |
 | `HF_TOKEN`, `SIGNAI_*` | off | optional ML layer for the sentence engine, see [`text_processing`](text_processing/README.md) |

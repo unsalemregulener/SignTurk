@@ -8,7 +8,7 @@ over WebSocket, sentence assembly, and the landmark data that drives the
 import asyncio, os, json, time, traceback, uuid, logging, base64, shutil, tempfile, secrets
 import numpy as np
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 # Load variables from a local .env file when python-dotenv is installed.
 try:
@@ -19,7 +19,7 @@ except Exception:
 
 import cv2
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,6 +32,7 @@ from database import engine, get_db, Base, database_name
 import models
 from text_processing.lexicon import restore_turkish, restore_turkish_words
 from live226 import Live226, prepare_frame
+from rate_limit import SlidingWindowLimiter
 from live_pipeline import (
     count_detected_hands as count_live_hands,
     hands_to_landmarks,
@@ -490,21 +491,35 @@ app.add_middleware(
 )
 
 # ── Authentication ────────────────────────────────────────
-# Bearer tokens live in memory: restarting the server signs everyone out.
-# A multi-instance deployment needs signed, expiring tokens or a shared store.
+# Bearer tokens live in memory and expire after SIGNTURK_TOKEN_HOURS; restarting
+# the server signs everyone out. A multi-instance deployment needs a shared store.
 _bearer = HTTPBearer(auto_error=False)
-_access_tokens: Dict[str, int] = {}
+TOKEN_SECONDS = int(float(os.environ.get("SIGNTURK_TOKEN_HOURS", "12")) * 3600)
+_access_tokens: Dict[str, Tuple[int, float]] = {}
+
+# Failed logins per (IP, email) and per IP, registrations per IP
+LOGIN_FAILURES = SlidingWindowLimiter(limit=5, window=600)
+LOGIN_FAILURES_BY_IP = SlidingWindowLimiter(limit=20, window=600)
+REGISTRATIONS_BY_IP = SlidingWindowLimiter(limit=10, window=3600)
+TOO_MANY_ATTEMPTS = "Çok fazla deneme, biraz sonra tekrar deneyin"
 
 
 def _issue_access_token(user_id: int) -> str:
+    now = time.time()
+    for expired in [t for t, (_, expires_at) in _access_tokens.items() if expires_at < now]:
+        _access_tokens.pop(expired, None)
     token = secrets.token_urlsafe(32)
-    _access_tokens[token] = user_id
+    _access_tokens[token] = (user_id, now + TOKEN_SECONDS)
     return token
 
 
 def _user_for_token(token: Optional[str], db: Session):
-    user_id = _access_tokens.get(token or "")
-    if not user_id:
+    entry = _access_tokens.get(token or "")
+    if not entry:
+        return None
+    user_id, expires_at = entry
+    if expires_at < time.time():
+        _access_tokens.pop(token, None)
         return None
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user or user.status != "Active":
@@ -647,7 +662,11 @@ async def get_landmark(word: str):
 # ═══════════════════════════════════════════════════════════
 @app.post("/api/register")
 @app.post("/api/auth/register")
-def register(data: RegisterData, db: Session = Depends(get_db)):
+def register(data: RegisterData, request: Request, db: Session = Depends(get_db)):
+    ip = request.client.host if request.client else "-"
+    if REGISTRATIONS_BY_IP.blocked(ip):
+        return JSONResponse(status_code=429, content={"error": TOO_MANY_ATTEMPTS})
+    REGISTRATIONS_BY_IP.hit(ip)
     email = data.email.lower().strip()
     if db.query(models.User).filter(models.User.email == email).first():
         return JSONResponse(status_code=400, content={"error": "Email zaten kayıtlı"})
@@ -666,16 +685,24 @@ def register(data: RegisterData, db: Session = Depends(get_db)):
 
 @app.post("/api/login")
 @app.post("/api/auth/login")
-def login(data: LoginData, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == data.email.lower().strip()).first()
+def login(data: LoginData, request: Request, db: Session = Depends(get_db)):
+    ip = request.client.host if request.client else "-"
+    email = data.email.lower().strip()
+    if LOGIN_FAILURES.blocked((ip, email)) or LOGIN_FAILURES_BY_IP.blocked(ip):
+        return JSONResponse(status_code=429, content={"error": TOO_MANY_ATTEMPTS})
+    user = db.query(models.User).filter(models.User.email == email).first()
     if not user or user.status != "Active" or not verify_pw(data.password, user.password_hash):
+        LOGIN_FAILURES.hit((ip, email))
+        LOGIN_FAILURES_BY_IP.hit(ip)
         return JSONResponse(status_code=401, content={"error": "Hatalı email veya şifre"})
+    LOGIN_FAILURES.reset((ip, email))
     user.sessions += 1
     db.commit()
     add_log_db(db, "Success", f"Giriş: {user.email}", user.email)
     return {"message": "Giriş başarılı",
             "access_token": _issue_access_token(user.id),
             "token_type": "bearer",
+            "expires_in": TOKEN_SECONDS,
             "user": {"id": user.id, "full_name": user.full_name,
                      "email": user.email, "role": user.role}}
 

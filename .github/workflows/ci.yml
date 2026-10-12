@@ -27,7 +27,7 @@ jobs:
       - name: Lint
         run: ruff check .
       - name: Compile
-        run: python -m compileall -q backend.py database.py models.py live_pipeline.py live226.py landmark_smoother.py signturk_runtime text_processing tools tests
+        run: python -m compileall -q backend.py database.py models.py live_pipeline.py live226.py landmark_smoother.py rate_limit.py signturk_runtime text_processing tools tests
       - name: Unit tests
         run: python -m unittest discover -s tests -v
       - name: Sentence engine evaluation

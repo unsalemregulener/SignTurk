@@ -131,6 +131,18 @@ with TestClient(backend.app) as client:
     r = client.post("/api/login", json={"email": email, "password": password})
     user_token = r.json().get("access_token")
     check("login returns a token", r.status_code == 200 and bool(user_token))
+    check("token lifetime is reported", r.json().get("expires_in", 0) > 0)
+
+    spare = client.post("/api/login", json={"email": email, "password": password}).json()["access_token"]
+    user_id, _ = backend._access_tokens[spare]
+    backend._access_tokens[spare] = (user_id, time.time() - 1)
+    check("expired token is refused", client.get("/api/history", headers={"Authorization": f"Bearer {spare}"}).status_code == 401)
+
+    wrong = [client.post("/api/login", json={"email": "nobody@example.com", "password": "wrong-password"}).status_code
+             for _ in range(6)]
+    check("repeated failed logins are limited", wrong == [401] * 5 + [429], wrong)
+    check("other accounts can still sign in",
+          client.post("/api/login", json={"email": email, "password": password}).status_code == 200)
     r = client.post("/api/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
     admin_token = r.json().get("access_token")
     check("admin created from environment", r.status_code == 200 and r.json()["user"]["role"] == "Admin")
