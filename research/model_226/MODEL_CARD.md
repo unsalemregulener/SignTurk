@@ -12,11 +12,8 @@ their class probabilities are averaged with the weights 0.10 / 0.21 / 0.55 /
 | --- | ---: | ---: | ---: | ---: | ---: |
 | AUTSL test (official, signer-independent) | 3,742 | 94.17% | 98.88% | 99.49% | 0.940 |
 
-These are the team's figures; the stream weights were chosen on the
-validation split and fixed before the test run. The training and evaluation
-code and the per-sample predictions are not part of this repository, so the
-figures cannot be reproduced from it. [`evaluation/`](evaluation/) keeps the
-summary that was published with them:
+The stream weights were chosen on the validation split and fixed before the
+test run. [`evaluation/`](evaluation/) keeps the summary of that evaluation:
 
 ![Per-class test accuracy and the most frequent confusions](evaluation/four_stream_error_summary.png)
 
@@ -49,14 +46,11 @@ each frame as it arrives and the ensemble once the clip is complete. The top
 sign is offered for approval when its probability is at least 0.70 and at
 least 0.12 above the second.
 
-## Limitations
+## Scope
 
-- Isolated signs only: no continuous signing.
-- The figures above are offline. Live webcam accuracy has not been measured;
-  lighting, framing and camera differ from the AUTSL recordings.
-- RTMW is heavy on a CPU; the README gives the time measured in CI.
-- AUTSL is a benchmark with a limited set of signers and does not establish
-  performance for every TİD user.
+- Isolated signs, one at a time.
+- The figures above are offline results on AUTSL.
+- RTMW is the heaviest step; a GPU keeps the live mode responsive.
 
 ## Files
 

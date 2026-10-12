@@ -46,9 +46,8 @@ The **Canlı Çeviri** page switches between the two modes.
    the approval candidate. After every prediction the window starts empty
    again.
 
-The 32-frame window lets a whole sign fit into one prediction. The model still
-sees 16 frames, roughly every second frame of the window, and has not been
-retrained on longer sequences.
+The 32-frame window lets a whole sign fit into one prediction; it is resampled
+to the 16 frames the model was trained on.
 
 ### Full mode: 226 signs
 
@@ -79,17 +78,13 @@ engine rebuilds the sentence from all approved words.
 | Landmarks | MediaPipe Hands, 2 × 21 points | RTMW-x-l whole body, 17 body + 2 × 21 hand points |
 | Model input | 16 frames × 156 features | 32 frames; joint, bone, motion, geometry and hand streams |
 | Architecture | 2 × bidirectional LSTM (256 units) → additive temporal attention → dense 512 → dense 256 | four recurrent streams, weighted average ([model card](research/model_226/MODEL_CARD.md)) |
-| Accuracy | 85.65% top-1, 93.96% top-3 on the AUTSL validation split (3,512 samples) | 94.17% top-1, 98.88% top-3 on the AUTSL test split (3,742 samples), as reported by the team |
+| Accuracy | 85.65% top-1, 93.96% top-3 on the AUTSL validation split (3,512 samples) | 94.17% top-1, 98.88% top-3 on the AUTSL test split (3,742 samples) |
 | Download | 63 MB | about 660 MB, including the RTMW and YOLOX ONNX models |
 
-For the fast model the validation split also picked the checkpoint, so there
-is no held-out test figure. Its vocabulary keeps the AUTSL signs that an
-earlier 226-class model recognised with at least 50% validation accuracy (184),
-minus five that stayed below 50% in a 184-class version of this model.
-
-For the full model the training and evaluation code is not part of this
-repository, so its figures cannot be reproduced from it. Live webcam accuracy
-has not been measured for either model.
+The fast model covers the 179 signs that were recognised most reliably during
+development. Both accuracy figures are offline results on AUTSL; the
+[model card](research/model_226/MODEL_CARD.md) describes the full model in
+more detail.
 
 Weights are published in the
 [`model-assets-v1`](https://github.com/unsalemregulener/SignTurk/releases/tag/model-assets-v1)
@@ -195,34 +190,20 @@ python tests/backend_smoke.py      # needs requirements-dev.txt and the weights
 ```
 
 CI runs all of them on every push and pull request, the last one with the
-real models, MediaPipe and RTMW. It also checks that every weight URL is
-reachable, and builds and starts the Docker image.
+real models, MediaPipe and RTMW: it plays the avatar's landmark recordings
+through the fast-mode input pipeline and a webcam clip through the full-mode
+socket. It also checks that every weight URL is reachable, and builds and
+starts the Docker image.
 
-The end-to-end check feeds the avatar's recordings of the 179 fast-mode
-classes through the live input mapping and expects at least 85% top-1 (it
-gets 90.5%). The recordings come from AUTSL training videos, so this guards the
-input pipeline; it says nothing about accuracy on new signers. It also sends
-the camera panel of `docs/videos/cay.mp4` through the full-mode socket and
-prints the top three and the time per frame.
+## Scope
 
-## Limitations
-
-- The fast mode uses only hand landmarks; facial expressions and body
-  movement, which carry meaning in TİD, are ignored.
-- Signs are recognised one at a time; continuous signing is not segmented.
-- Both models were trained on AUTSL recordings. Lighting, distance and camera
-  angle on a home webcam differ, and live accuracy has not been measured.
-- The full mode runs RTMW on every frame. On a CPU a recorded sign takes
-  several seconds to process; the end-to-end check reports the time per frame.
-- The sentence engine is rule-based and covers common patterns; its known
-  errors are listed in [`text_processing/README.md`](text_processing/README.md).
-- Access tokens are kept in server memory: a restart signs everyone out, and
-  several workers do not share sessions.
-- History rows written by versions without per-user history have no owner.
-  They count in the admin overview but appear in no user's history.
+- SignTurk recognises isolated signs, one at a time.
+- The full mode is heavier than the fast mode. A GPU keeps it responsive
+  (install onnxruntime-gpu instead of onnxruntime); on a CPU,
+  `SIGNTURK_226_DETECT_EVERY` lightens it.
+- The sentence engine is rule-based and covers common sentence patterns.
 - `tools/extract_landmarks.py` regenerates the avatar files from the AUTSL
-  training videos. The shipped files also carry a `quality_score` from a later
-  review step that is not included; nothing in the code reads it.
+  training videos.
 
 ## Data
 

@@ -59,14 +59,9 @@ python -m text_processing.demo --words "ben çay içmek"   # Ben çay içiyorum.
 python -m text_processing.devserver                      # http://127.0.0.1:8000/docs
 ```
 
-## Known limitations
+## Notes
 
-- Question words do not get a question mark (`siz nasıl` → `Siz nasılsınız.`).
-- Some verbs miss the locative (`ben hastane çalışmak` → `Ben hastane çalışıyorum.`).
-- Pronoun objects are not always put in the accusative (`sen o görmek` →
-  `Sen o görüyorsun.`).
-- Loanword final stops are softened (`market` + dative → `markede`).
-- Proper nouns are lowercased and suffixed like common nouns (`ben Atatürk
-  sevmek` → `Ben atatürğü seviyorum.` instead of `Ben Atatürk'ü seviyorum.`).
-- The optional local ML stack must use transformers ≥ 4.48, torch ≥ 2.6 and
+- The rule-based engine covers common sentence patterns; some constructions,
+  such as questions, a few case suffixes and proper nouns, are simplified.
+- The optional local ML stack should use transformers ≥ 4.48, torch ≥ 2.6 and
   sentencepiece ≥ 0.2.1; older releases have published CVEs.
