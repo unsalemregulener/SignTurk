@@ -7,8 +7,9 @@ are in Turkish.
 
 [![Live recognition of the sign "çay" (tea)](docs/images/cay-preview.gif)](docs/videos/cay.mp4)
 
-- **Live recognition:** webcam frames over a WebSocket, MediaPipe Hands on the
-  server, a BiLSTM + attention classifier over 179 signs.
+- **Two recognition modes:** a fast 179-sign model that watches the camera
+  stream continuously (MediaPipe hand landmarks), and a 226-sign ensemble that
+  reads one recorded sign at a time (RTMW whole-body landmarks).
 - **Approval step:** a prediction enters the sentence only after the user
   accepts it, so a wrong guess can be rejected first.
 - **Turkish sentence engine:** rule-based morphology turns glosses such as
@@ -21,7 +22,11 @@ are in Turkish.
 
 <img src="docs/images/avatar.jpg" alt="3D avatar signing hoşça kal" width="560">
 
-## How live recognition works
+## Live recognition
+
+The **Canlı Çeviri** page switches between the two modes.
+
+### Fast mode: 179 signs
 
 1. The browser sends a JPEG frame at most every 100 ms and waits for the
    answer before sending the next one.
@@ -40,28 +45,55 @@ are in Turkish.
 6. The model scores 179 signs. A prediction at or above 0.40 confidence becomes
    the approval candidate. After every prediction the window starts empty
    again.
-7. Approved words are saved to the user's history and the sentence engine
-   rebuilds the sentence from all approved words.
 
 The 32-frame window lets a whole sign fit into one prediction. The model still
 sees 16 frames, roughly every second frame of the window, and has not been
 retrained on longer sequences.
 
-## Model
+### Full mode: 226 signs
 
-| | |
-| --- | --- |
-| Vocabulary | 179 of the 226 signs in [AUTSL](#data) |
-| Input | 16 frames × 156 hand features |
-| Architecture | 2 × bidirectional LSTM (256 units) → additive temporal attention → dense 512 → dense 256 → softmax |
-| Accuracy | 85.65% top-1, 93.96% top-3, 95.59% top-5 on the AUTSL validation split (3,512 samples) |
-| Weights | `live-179.keras`, 62.6 MB, in the [`model-assets-v1`](https://github.com/unsalemregulener/SignTurk/releases/tag/model-assets-v1) release |
+1. The user presses **İşareti kaydet**. After a 3-2-1 countdown the browser
+   captures 32 unmirrored frames at about 12 fps (2.7 seconds) and streams
+   them to the server as it records.
+2. For each frame the server runs a YOLOX person detector and RTMW whole-body
+   pose estimation. Of the 133 keypoints it keeps 17 body points and 21 points
+   per hand: 75 landmarks with the signer's own left and right.
+3. When the clip is complete the landmarks are centred between the shoulders,
+   scaled by the shoulder width and turned into joint, bone, motion, geometry
+   and hand features.
+4. Four Keras models score the 226 signs and their probabilities are averaged
+   with the weights 0.10, 0.21, 0.55 and 0.14.
+5. The page shows the top three. The first becomes the approval candidate when
+   its probability is at least 0.70 and 0.12 above the second, and any of the
+   three can be approved. Barely moving hands or a badly framed signer add a
+   hint next to the result.
 
-The validation split was also used to pick the checkpoint, so there is no
-held-out test figure for this model, and live webcam accuracy has not been
-measured. The vocabulary keeps the AUTSL signs that an earlier 226-class model
-recognised with at least 50% validation accuracy (184), minus five that stayed
-below 50% in a 184-class version of this model.
+In both modes approved words are saved to the user's history and the sentence
+engine rebuilds the sentence from all approved words.
+
+## Models
+
+| | Fast mode | Full mode |
+| --- | --- | --- |
+| Vocabulary | 179 of the 226 signs in [AUTSL](#data) | all 226 signs |
+| Landmarks | MediaPipe Hands, 2 × 21 points | RTMW-x-l whole body, 17 body + 2 × 21 hand points |
+| Model input | 16 frames × 156 features | 32 frames; joint, bone, motion, geometry and hand streams |
+| Architecture | 2 × bidirectional LSTM (256 units) → additive temporal attention → dense 512 → dense 256 | four recurrent streams, weighted average ([model card](research/model_226/MODEL_CARD.md)) |
+| Accuracy | 85.65% top-1, 93.96% top-3 on the AUTSL validation split (3,512 samples) | 94.17% top-1, 98.88% top-3 on the AUTSL test split (3,742 samples), as reported by the team |
+| Download | 63 MB | about 660 MB, including the RTMW and YOLOX ONNX models |
+
+For the fast model the validation split also picked the checkpoint, so there
+is no held-out test figure. Its vocabulary keeps the AUTSL signs that an
+earlier 226-class model recognised with at least 50% validation accuracy (184),
+minus five that stayed below 50% in a 184-class version of this model.
+
+For the full model the training and evaluation code is not part of this
+repository, so its figures cannot be reproduced from it. Live webcam accuracy
+has not been measured for either model.
+
+Weights are published in the
+[`model-assets-v1`](https://github.com/unsalemregulener/SignTurk/releases/tag/model-assets-v1)
+release and verified against `model-assets.json`.
 
 ## Quick start
 
@@ -73,15 +105,17 @@ cd SignTurk
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python tools/download_models.py    # downloads the weights and checks their SHA-256
+python tools/download_models.py --bundle all   # or leave out --bundle for the fast mode only
 cp .env.example .env               # set SIGNTURK_ADMIN_EMAIL and SIGNTURK_ADMIN_PASSWORD
 uvicorn backend:app --port 8000
 ```
 
 Open <http://127.0.0.1:8000>, register or sign in with the admin account, and
-allow camera access on the **Canlı Çeviri** page.
+allow camera access on the **Canlı Çeviri** page. The full mode becomes
+available once its models have loaded in the background; the admin
+**Model Durumu** page shows its state.
 
-With Docker:
+With Docker (both modes; `--build-arg MODELS=live` builds without the full mode):
 
 ```bash
 docker compose up --build
@@ -98,6 +132,8 @@ Settings are read from the environment or from a `.env` file
 | `ALLOWED_ORIGINS` | `http://localhost:8000,http://127.0.0.1:8000` | browser origins allowed by CORS |
 | `SIGNTURK_ADMIN_EMAIL`, `SIGNTURK_ADMIN_PASSWORD` | empty | first administrator, created at startup; the password needs at least 8 characters |
 | `SIGNTURK_ADMIN_NAME` | `SignTurk Admin` | display name of that account |
+| `SIGNTURK_ENABLE_226` | `1` | `0` skips loading the full mode |
+| `SIGNTURK_226_DETECT_EVERY` | `1` | run the person detector on every Nth frame of a clip and reuse its box in between |
 | `HF_TOKEN`, `SIGNAI_*` | off | optional ML layer for the sentence engine, see [`text_processing`](text_processing/README.md) |
 
 There are no built-in accounts. Without the admin variables the application
@@ -107,37 +143,44 @@ runs with registered users only.
 
 Authenticated routes take `Authorization: Bearer <token>`; the token comes
 from `/api/login`. Browsers cannot set headers on WebSockets, so the live
-socket takes it as `?token=`.
+sockets take it as `?token=`.
 
 | Route | Access | Purpose |
 | --- | --- | --- |
 | `GET /` | public | web interface |
 | `GET /avatar3d` | public | avatar page, embedded by the interface |
-| `GET /api/health` | public | model, MediaPipe, database and window sizes |
+| `GET /api/health` | public | models, MediaPipe, database, window sizes and the state of the full mode |
 | `GET /signs`, `GET /landmark/{word}` | public | avatar vocabulary and landmark sequences |
-| `GET /api/dictionary`, `GET /api/dictionary/{class_id}` | public | model labels in Turkish and English |
+| `GET /api/dictionary`, `GET /api/dictionary/{autsl_id}` | public | the 226 signs: Turkish spelling, English (for the 179), which mode knows them |
 | `POST /api/register`, `POST /api/login`, `POST /api/logout` | public | accounts |
-| `WS /api/predict/live?token=…` | user | live recognition; also accepts 126 landmark values per message instead of a frame |
+| `WS /api/predict/live?token=…` | user | fast mode; also accepts 126 landmark values per message instead of a frame |
+| `WS /api/predict/live226?token=…` | user | full mode: `{"action": "start"}`, 32 × `{"image": data_url}`, `{"action": "end"}` |
 | `POST /api/predict/sequence` | user | classify 16 or 32 frames of 126 landmark values (signer's left hand first) |
 | `GET /api/history`, `GET /api/me/summary` | user | approved words of the current user |
 | `GET /api/settings`, `POST /api/settings` | user | speech and avatar speed |
 | `GET /api/model/status` | user | model summary |
 | `/api/text/*` | user | sentence engine: `correct`, `correct/async`, `jobs/{id}`, `models`, `health`, `ping`, `audio/{file}` |
 | `GET /api/admin/overview`, `users`, `logs`, `model` | admin | administration |
-| `GET /api/debug/model-check` | admin | loading state of every model asset and the model config |
+| `GET /api/debug/model-check` | admin | loading state of every fast-mode asset and its config |
 | `DELETE /api/text/cache`, `DELETE /api/text/cache/{model_key}` | admin | clear the sentence engine cache |
+
+Both live sockets accept `approve` (optionally with a `word`), `reject`,
+`undo` and `reset_sentence` actions and answer with `sentence_update`.
 
 ## Project layout
 
 ```
-backend.py             FastAPI app: accounts, live WebSocket, history, admin
-live_pipeline.py       window resampling and feature extraction (NumPy only)
+backend.py             FastAPI app: accounts, live WebSockets, history, admin
+live_pipeline.py       fast mode: window resampling and features (NumPy only)
+live226.py             full mode: loading, per-frame landmarks, clip prediction
+signturk_runtime/      full mode: RTMW extractor, features, ensemble, framing check
+research/model_226/    full mode: stream config, vocabulary, evaluation summary, model card
 landmark_smoother.py   smoothing applied to avatar landmark files
 database.py, models.py SQLAlchemy engine and tables
 text_processing/       Turkish sentence engine
 frontend/              interface (React from a CDN), avatar page, three.js r128, avatar.glb
 landmarks/             226 landmark sequences for the avatar
-demo_assets_179/       model metadata; the weights are downloaded
+demo_assets_179/       fast mode metadata; the weights are downloaded
 tools/                 download_models.py, extract_landmarks.py (avatar files from AUTSL)
 tests/                 unit tests and the end-to-end check (backend_smoke.py)
 ```
@@ -152,21 +195,25 @@ python tests/backend_smoke.py      # needs requirements-dev.txt and the weights
 ```
 
 CI runs all of them on every push and pull request, the last one with the
-real model and MediaPipe. It also checks that the weight URL is reachable, and
-builds and starts the Docker image.
+real models, MediaPipe and RTMW. It also checks that every weight URL is
+reachable, and builds and starts the Docker image.
 
-The end-to-end check also feeds the avatar's recordings of the 179 model
+The end-to-end check feeds the avatar's recordings of the 179 fast-mode
 classes through the live input mapping and expects at least 85% top-1 (it
 gets 90.5%). The recordings come from AUTSL training videos, so this guards the
-input pipeline; it says nothing about accuracy on new signers.
+input pipeline; it says nothing about accuracy on new signers. It also sends
+the camera panel of `docs/videos/cay.mp4` through the full-mode socket and
+prints the top three and the time per frame.
 
 ## Limitations
 
-- Only hand landmarks are used. Facial expressions and body movement, which
-  carry meaning in TİD, are ignored.
+- The fast mode uses only hand landmarks; facial expressions and body
+  movement, which carry meaning in TİD, are ignored.
 - Signs are recognised one at a time; continuous signing is not segmented.
-- The model was trained on AUTSL recordings. Lighting, distance and camera
+- Both models were trained on AUTSL recordings. Lighting, distance and camera
   angle on a home webcam differ, and live accuracy has not been measured.
+- The full mode runs RTMW on every frame. On a CPU a recorded sign takes
+  several seconds to process; the end-to-end check reports the time per frame.
 - The sentence engine is rule-based and covers common patterns; its known
   errors are listed in [`text_processing/README.md`](text_processing/README.md).
 - Access tokens are kept in server memory: a restart signs everyone out, and
@@ -179,7 +226,7 @@ input pipeline; it says nothing about accuracy on new signers.
 
 ## Data
 
-The model and the landmark sequences were derived from the AUTSL dataset:
+Both models and the landmark sequences were derived from the AUTSL dataset:
 O. M. Sincan and H. Y. Keles, *AUTSL: A Large Scale Multi-Modal Turkish Sign
 Language Dataset and Baseline Methods*, IEEE Access, 2020. The videos are not
 included; their use is governed by the dataset's own terms.
@@ -194,5 +241,5 @@ the 3D avatar integration.
 ## License
 
 The code is released under the [MIT License](LICENSE). Third-party components,
-including three.js, the avatar model and the AUTSL-derived data, keep their own
-terms; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+including three.js, RTMW, YOLOX, the avatar model and the AUTSL-derived data,
+keep their own terms; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

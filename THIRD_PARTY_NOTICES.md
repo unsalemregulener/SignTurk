@@ -11,20 +11,25 @@ time or installed with it. They keep their own licenses and terms.
 | three.js r128 | `frontend/three.min.js`, `frontend/GLTFLoader.js`, `frontend/OrbitControls.js` | MIT, Copyright 2010-2021 Three.js Authors |
 | Mixamo character "Ch08" | `frontend/avatar.glb` (textures resized) | Adobe Mixamo terms of use, not the MIT License |
 | Landmark sequences derived from AUTSL | `landmarks/*.json` | see [AUTSL](#autsl) |
-| Model metadata derived from AUTSL | `demo_assets_179/` | see [AUTSL](#autsl) |
+| Model metadata derived from AUTSL | `demo_assets_179/`, `research/model_226/` | see [AUTSL](#autsl) |
 
 The avatar is included only so that the demo runs. Check Adobe's Mixamo terms
 before reusing the character file on its own.
 
 ## Model weights
 
-`live-179.keras` is published as a release asset and downloaded by
-`tools/download_models.py`. It was trained by the project team on landmark
-sequences extracted from AUTSL videos; see [AUTSL](#autsl).
+These files are published as release assets and downloaded by
+`tools/download_models.py`.
+
+| Files | Origin | Terms |
+| --- | --- | --- |
+| `live-179.keras`, `226-*.keras` | trained by the project team on AUTSL | see [AUTSL](#autsl) |
+| `rtmw-dw-x-l_simcc-cocktail14.onnx` | RTMW from OpenMMLab MMPose, copied from the Hugging Face mirror [Izymka/rtmw-dw-x-l_simcc-cocktail14](https://huggingface.co/Izymka/rtmw-dw-x-l_simcc-cocktail14) | Apache-2.0 |
+| `yolox_m.onnx` | YOLOX-m from Megvii, copied from the Hugging Face mirror [memescreamer/yolox-onnx](https://huggingface.co/memescreamer/yolox-onnx) | Apache-2.0 |
 
 ## AUTSL
 
-The model and the landmark sequences were derived from the AUTSL dataset:
+The models and the landmark sequences were derived from the AUTSL dataset:
 
 > O. M. Sincan and H. Y. Keles, "AUTSL: A Large Scale Multi-Modal Turkish Sign
 > Language Dataset and Baseline Methods," IEEE Access, 2020.
@@ -57,8 +62,10 @@ Docker image.
 | TensorFlow | Apache-2.0 |
 | Keras | Apache-2.0 |
 | MediaPipe | Apache-2.0 |
+| ONNX Runtime | MIT |
+| rtmlib | Apache-2.0 |
 | NumPy | BSD-3-Clause |
-| OpenCV (opencv-python-headless) | Apache-2.0 |
+| OpenCV (opencv-python, opencv-contrib-python) | Apache-2.0 |
 | SQLAlchemy | MIT |
 | psycopg | LGPL-3.0 |
 | passlib | BSD |
