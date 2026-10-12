@@ -26,8 +26,10 @@ are in Turkish.
 1. The browser sends a JPEG frame at most every 100 ms and waits for the
    answer before sending the next one.
 2. The server runs MediaPipe Hands on the frame: 2 hands × 21 points × xyz =
-   126 values. Frames without a hand are skipped; after 8 in a row the window
-   is reset.
+   126 values, the signer's left hand first. MediaPipe names hands as if the
+   image were mirrored, so on these unmirrored frames its "Right" hand is the
+   signer's left. Frames without a hand are skipped; after 8 in a row the
+   window is reset.
 3. Frames with a hand are collected in a **32-frame capture window**, about
    3 seconds of signing at the full frame rate.
 4. The window is resampled to **16 evenly spaced frames**, keeping the first
@@ -49,13 +51,17 @@ retrained on longer sequences.
 
 | | |
 | --- | --- |
-| Vocabulary | 179 signs, a subset of the 226 signs in [AUTSL](#data) |
+| Vocabulary | 179 of the 226 signs in [AUTSL](#data) |
 | Input | 16 frames × 156 hand features |
 | Architecture | 2 × bidirectional LSTM (256 units) → additive temporal attention → dense 512 → dense 256 → softmax |
-| Offline accuracy | 85.65% top-1, 93.96% top-3, 95.59% top-5 (team evaluation on recorded videos) |
+| Accuracy | 85.65% top-1, 93.96% top-3, 95.59% top-5 on the AUTSL validation split (3,512 samples) |
 | Weights | `live-179.keras`, 62.6 MB, in the [`model-assets-v1`](https://github.com/unsalemregulener/SignTurk/releases/tag/model-assets-v1) release |
 
-Live webcam accuracy has not been measured.
+The validation split was also used to pick the checkpoint, so there is no
+held-out test figure for this model, and live webcam accuracy has not been
+measured. The vocabulary keeps the AUTSL signs that an earlier 226-class model
+recognised with at least 50% validation accuracy (184), minus five that stayed
+below 50% in a 184-class version of this model.
 
 ## Quick start
 
@@ -112,7 +118,7 @@ socket takes it as `?token=`.
 | `GET /api/dictionary`, `GET /api/dictionary/{class_id}` | public | model labels in Turkish and English |
 | `POST /api/register`, `POST /api/login`, `POST /api/logout` | public | accounts |
 | `WS /api/predict/live?token=…` | user | live recognition; also accepts 126 landmark values per message instead of a frame |
-| `POST /api/predict/sequence` | user | classify 16 or 32 frames of 126 landmark values |
+| `POST /api/predict/sequence` | user | classify 16 or 32 frames of 126 landmark values (signer's left hand first) |
 | `GET /api/history`, `GET /api/me/summary` | user | approved words of the current user |
 | `GET /api/settings`, `POST /api/settings` | user | speech and avatar speed |
 | `GET /api/model/status` | user | model summary |
@@ -148,6 +154,11 @@ python tests/backend_smoke.py      # needs requirements-dev.txt and the weights
 CI runs all of them on every push and pull request, the last one with the
 real model and MediaPipe. It also checks that the weight URL is reachable, and
 builds and starts the Docker image.
+
+The end-to-end check also feeds the avatar's recordings of the 179 model
+classes through the live input mapping and expects at least 85% top-1 (it
+gets 90.5%). The recordings come from AUTSL training videos, so this guards the
+input pipeline; it says nothing about accuracy on new signers.
 
 ## Limitations
 
