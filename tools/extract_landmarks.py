@@ -10,9 +10,9 @@ The dataset folder needs `SignList_ClassId_TR_EN.csv`, `train_labels.csv` and
 `train/<sample>_color.mp4`. The output is not smoothed; the server smooths a
 file when it serves it unless the file is marked `"smoothed": true`.
 
-`left_hand` and `right_hand` keep MediaPipe's handedness labels, which assume a
-mirrored image. On these unmirrored videos `left_hand` is the signer's right
-hand; `live_pipeline.hands_to_landmarks` converts to the model's layout.
+`left_hand` and `right_hand` are the HandLandmarker's labels, which name the
+signer's own hands. The Hands solution used on the live path names them the
+other way round (see `live_pipeline.TRAINING_HAND_ORDER`).
 """
 
 import argparse

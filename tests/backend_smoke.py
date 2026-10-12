@@ -7,8 +7,8 @@ Needs the full requirements, httpx and the downloaded weights:
     python tests/backend_smoke.py
 
 Runs against a throwaway SQLite database. Test credentials are generated at
-run time and never printed. The checks do not depend on which sign the model
-predicts.
+run time and never printed. SMOKE_FAKE_MEDIAPIPE=1 skips the check that needs
+MediaPipe to find hands in a real video.
 """
 import base64
 import json
@@ -49,11 +49,12 @@ def check(name, ok, detail=""):
 def landmark_vectors(path):
     """Model input layout for a landmark file.
 
-    The files keep MediaPipe's handedness labels (left_hand = "Left"), so they
-    go through the same mapping as live frames.
+    The files were extracted with MediaPipe's Tasks HandLandmarker, which
+    names the signer's own hands; the live Hands solution names them the other
+    way round, so left_hand is passed as its "Right".
     """
     frames = json.loads(Path(path).read_text(encoding="utf-8"))["frames"]
-    return np.stack([hands_to_landmarks([("Left", frame.get("left_hand")), ("Right", frame.get("right_hand"))])
+    return np.stack([hands_to_landmarks([("Right", frame.get("left_hand")), ("Left", frame.get("right_hand"))])
                      for frame in frames])
 
 
@@ -68,12 +69,12 @@ def video_frame_data_url(path, position=0.5):
     return "data:image/jpeg;base64," + base64.b64encode(jpeg.tobytes()).decode("ascii")
 
 
-def camera_clip(path, count=32, end=0.55):
-    """Camera-panel frames of the recorded interface, as data URLs.
+def camera_frames(path, end=0.55):
+    """Unmirrored camera-panel frames of the recorded interface (BGR, 30 fps).
 
     docs/videos/cay.mp4 is a screen recording: the sign is made during the
     first ~55% and the camera preview on screen was mirrored, so the panel is
-    cropped and flipped back.
+    cropped and flipped back to the frames the browser sent.
     """
     capture = cv2.VideoCapture(str(path))
     frames = []
@@ -81,15 +82,20 @@ def camera_clip(path, count=32, end=0.55):
         ok, frame = capture.read()
         if not ok:
             break
-        frames.append(frame)
+        frames.append(cv2.flip(frame[222:612, 256:882], 1))
     capture.release()
-    last = max(int(len(frames) * end) - 1, 0)
-    clip = []
-    for index in np.linspace(0, last, count).round().astype(int):
-        panel = cv2.flip(frames[index][222:612, 256:882], 1)
-        ok, jpeg = cv2.imencode(".jpg", panel, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        clip.append("data:image/jpeg;base64," + base64.b64encode(jpeg.tobytes()).decode("ascii"))
-    return clip
+    return frames[:max(int(len(frames) * end), 1)]
+
+
+def data_url(frame):
+    ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    return "data:image/jpeg;base64," + base64.b64encode(jpeg.tobytes()).decode("ascii")
+
+
+def camera_clip(path, count=32):
+    """`count` evenly spaced camera-panel frames, as data URLs."""
+    frames = camera_frames(path)
+    return [data_url(frames[i]) for i in np.linspace(0, len(frames) - 1, count).round().astype(int)]
 
 
 def wait_for_226(client, seconds=900):
@@ -190,6 +196,32 @@ with TestClient(backend.app) as client:
         ws.send_text(json.dumps({"image": video_frame_data_url(ROOT / "docs" / "videos" / "cay.mp4")}))
         reply = ws.receive_json()
         check("MediaPipe processes a camera frame", reply.get("label_tr") != "MediaPipe kullanılamıyor", reply)
+
+    # The fast mode end to end on a webcam recording: frames at 10 fps, as the
+    # browser sends them, through MediaPipe and the model.
+    if os.environ.get("SMOKE_FAKE_MEDIAPIPE") == "1":
+        print("     skipped the cay recording: it needs the real MediaPipe")
+    else:
+        frames = camera_frames(ROOT / "docs" / "videos" / "cay.mp4", end=0.6)[::3]
+        vectors = [v for v in (backend.extract_landmarks_from_frame(f) for f in frames)
+                   if v is not None and backend.count_detected_hands(v) > 0]
+        if len(vectors) >= backend.CAPTURE_WINDOW:
+            window = np.stack(vectors[:backend.CAPTURE_WINDOW])
+            swapped = np.concatenate([window[:, 63:], window[:, :63]], axis=1)
+            for name, candidate in (("live order", window), ("hands swapped", swapped)):
+                top = backend.run_best_inference(candidate)["top_predictions"]
+                print(f"     cay recording, {name}: {[(p['label_tr'], p['confidence']) for p in top]}")
+        first = None
+        with client.websocket_connect(f"/api/predict/live?token={user_token}") as ws:
+            for frame in frames:
+                ws.send_text(json.dumps({"image": data_url(frame)}))
+                reply = ws.receive_json()
+                if reply.get("class_id", -1) >= 0:
+                    first = reply
+                    break
+        check("fast mode recognises the cay recording",
+              first is not None and first["label_tr"].strip("()?") == "cay",
+              first and [(p["label_tr"], p["confidence"]) for p in first["top_predictions"]] or f"{len(vectors)} hand frames")
 
     with client.websocket_connect(f"/api/predict/live?token={user_token}") as ws:
         ws.send_text(json.dumps({"landmarks": [0.0] * 126}))

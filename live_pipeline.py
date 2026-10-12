@@ -4,7 +4,7 @@ The browser streams frames into a capture window (32 frames by default).
 When the window is full it is resampled to the model's fixed input length
 (16 frames) and turned into 156 features per frame:
 
-    126 hand coordinates (signer's left hand 63 + right hand 63)
+    126 hand coordinates (MediaPipe "Left" hand 63 + "Right" hand 63)
       → wrist-relative, scale-normalized coordinates
       → + 30 finger-joint angles
       → z-score normalization
@@ -16,14 +16,16 @@ from typing import Iterable, Optional, Sequence, Tuple
 
 import numpy as np
 
-# MediaPipe labels handedness as if the image were mirrored, so on an
-# unmirrored camera frame its "Right" hand is the signer's left hand. The model
-# was trained with the signer's left hand first.
-TRAINING_HAND_ORDER = ("Right", "Left")
+# The live path runs MediaPipe's Hands solution, which names hands as if the
+# image were mirrored: on an unmirrored camera frame its "Left" hand is the
+# signer's right hand. The training data was extracted the same way, with
+# "Left" first. (MediaPipe's Tasks HandLandmarker, used for the avatar files,
+# names the signer's own hands, so its labels are the other way round.)
+TRAINING_HAND_ORDER = ("Left", "Right")
 
 
 def hands_to_landmarks(hands: Iterable[Tuple[str, np.ndarray]]) -> np.ndarray:
-    """126 values in the training layout from (MediaPipe label, 21x3 points) pairs.
+    """126 values in the training layout from (Hands solution label, 21x3 points) pairs.
 
     Expects an unmirrored frame. A missing hand stays zero.
     """
