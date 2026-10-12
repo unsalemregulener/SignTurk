@@ -7,6 +7,7 @@ over WebSocket, sentence assembly, and the landmark data that drives the
 
 import asyncio, os, json, time, traceback, uuid, logging, base64, shutil, tempfile, secrets
 import numpy as np
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -471,7 +472,13 @@ class LoginData(BaseModel):
 # ═══════════════════════════════════════════════════════════
 #  APP SETUP
 # ═══════════════════════════════════════════════════════════
-app = FastAPI(title="SignTurk API", version="3.1.0")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await startup_event()
+    yield
+
+
+app = FastAPI(title="SignTurk API", version="3.1.0", lifespan=lifespan)
 
 _ALLOWED_ORIGINS = [
     origin.strip()
@@ -1217,7 +1224,6 @@ def ensure_history_user_column() -> None:
         logger.info("[DB] Added history.user_id column")
 
 
-@app.on_event("startup")
 async def startup_event():
     Base.metadata.create_all(bind=engine)
     ensure_history_user_column()

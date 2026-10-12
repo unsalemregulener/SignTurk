@@ -1,0 +1,31 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    # The model files and their preprocessing depend on these; move them on
+    # purpose, with the end-to-end check, rather than through monthly PRs.
+    ignore:
+      - dependency-name: tensorflow
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: keras
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: mediapipe
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: numpy
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: opencv-python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: opencv-contrib-python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: onnxruntime
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: rtmlib
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]

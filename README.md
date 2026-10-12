@@ -116,6 +116,9 @@ With Docker (both modes; `--build-arg MODELS=live` builds without the full mode)
 docker compose up --build
 ```
 
+The compose file keeps the SQLite database in the `signturk-data` volume
+unless `.env` sets `DATABASE_URL`.
+
 ## Configuration
 
 Settings are read from the environment or from a `.env` file

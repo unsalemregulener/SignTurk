@@ -33,11 +33,11 @@ COPY text_processing/ text_processing/
 COPY frontend/ frontend/
 COPY landmarks/ landmarks/
 
-# The app writes only uploads/ and, without DATABASE_URL, local_dev.db in /app;
-# the model files stay owned by root.
+# The app writes only uploads/, data/ (the compose volume) and, without
+# DATABASE_URL, local_dev.db in /app; the model files stay owned by root.
 RUN useradd --create-home --uid 10001 signturk \
-    && mkdir -p uploads \
-    && chown signturk:signturk /app /app/uploads
+    && mkdir -p uploads data \
+    && chown signturk:signturk /app /app/uploads /app/data
 USER signturk
 
 EXPOSE 8000
