@@ -1,0 +1,50 @@
+{
+  "schema_version": 3,
+  "release": "https://github.com/unsalemregulener/SignTurk/releases/tag/model-assets-v1",
+  "assets": [
+    {
+      "name": "226-skeleton-v2",
+      "url": "https://github.com/unsalemregulener/SignTurk/releases/download/model-assets-v1/226-skeleton-v2.keras",
+      "path": "research/model_226/models/skeleton_v2.keras",
+      "bytes": 113367206,
+      "sha256": "83404b92a5f50cc7c6e2b3fc1a053166b1d6eff5867b2f6d64dfd1d17610aa14"
+    },
+    {
+      "name": "226-skeleton-v4-seed",
+      "url": "https://github.com/unsalemregulener/SignTurk/releases/download/model-assets-v1/226-skeleton-v4-seed.keras",
+      "path": "research/model_226/models/skeleton_v4_seed.keras",
+      "bytes": 97878591,
+      "sha256": "b3e92d8a2dd98b5116a93f6aaf4580b631f35abbcaed056796ab09438914e2ab"
+    },
+    {
+      "name": "226-skeleton-v6-seed",
+      "url": "https://github.com/unsalemregulener/SignTurk/releases/download/model-assets-v1/226-skeleton-v6-seed.keras",
+      "path": "research/model_226/models/skeleton_v6_seed.keras",
+      "bytes": 97878863,
+      "sha256": "a0ec53dbcf28b0868a2390330a0f9c27649ee4e2d48ff198f910318a1e37ebfe"
+    },
+    {
+      "name": "226-hand-stream",
+      "url": "https://github.com/unsalemregulener/SignTurk/releases/download/model-assets-v1/226-hand-stream.keras",
+      "path": "research/model_226/models/hand_stream.keras",
+      "bytes": 25324457,
+      "sha256": "713702950ae0d2131bf20bcd47bd58186ced80f65d51c7dec6d6f88ab169c8ec"
+    },
+    {
+      "name": "yolox-m-humanart",
+      "url": "https://github.com/unsalemregulener/SignTurk/releases/download/model-assets-v1/yolox_m_humanart.onnx",
+      "source": "https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/yolox_m_8xb8-300e_humanart-c2c7a14a.zip",
+      "path": "research/model_226/models/rtmw/yolox_m_humanart.onnx",
+      "bytes": 101400344,
+      "sha256": "3dea6513388889f0fff4b77bf7a26013600321b9eb9ceb0e9a400a82572f5f23"
+    },
+    {
+      "name": "rtmw-x-l-256x192",
+      "url": "https://github.com/unsalemregulener/SignTurk/releases/download/model-assets-v1/rtmw-dw-x-l_simcc-cocktail14_256x192.onnx",
+      "source": "https://download.openmmlab.com/mmpose/v1/projects/rtmw/onnx_sdk/rtmw-dw-x-l_simcc-cocktail14_270e-256x192_20231122.zip",
+      "path": "research/model_226/models/rtmw/rtmw-dw-x-l_simcc-cocktail14_256x192.onnx",
+      "bytes": 228708578,
+      "sha256": "9a9bc17c13ff0a1e37507f45a037a21bc410cd08374b0e664c57d0080843aa58"
+    }
+  ]
+}

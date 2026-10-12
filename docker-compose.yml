@@ -1,0 +1,18 @@
+services:
+  signturk:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - TF_CPP_MIN_LOG_LEVEL=3
+      # SQLite in the named volume unless .env sets DATABASE_URL
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/data/signturk.db}
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - signturk-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  signturk-data:

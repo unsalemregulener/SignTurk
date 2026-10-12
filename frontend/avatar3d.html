@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignTurk 3D Animasyon</title>
+<script src="/frontend/three.min.js?v=2"></script>
+<script src="/frontend/GLTFLoader.js?v=2"></script>
+<script src="/frontend/OrbitControls.js?v=2"></script>
+<style>
+/* ── Design tokens ── */
+:root{
+  --bg:#f5f0eb;
+  --surface:#ffffff;
+  --surface2:#f8f6f3;
+  --border:#e8e2da;
+  --accent:#c9a96e;
+  --text:#1a1714;
+  --muted:#8c7b6b;
+  --success:#22c55e;
+  --danger:#ef4444;
+  --radius:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;overflow:hidden;}
+
+/* Layout */
+.layout{display:block;width:100%;height:100vh;}
+
+/* 3D viewport */
+.viewport-wrap{position:relative;background:#3a4250;overflow:hidden;width:100%;height:100vh;}
+#animCanvas{width:100%;height:100%;display:block;}
+.loading-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#3a4250;color:#cfd4dd;gap:14px;font-size:0.88rem;z-index:10;}
+.spinner{width:36px;height:36px;border:3px solid #222;border-top-color:var(--accent,#c9a96e);border-radius:50%;animation:spin 0.8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* Viewport badges */
+.vp-badge{position:absolute;top:14px;left:14px;display:flex;gap:8px;z-index:5;}
+.badge{padding:4px 10px;border-radius:20px;font-size:0.72rem;font-weight:600;letter-spacing:0.04em;backdrop-filter:blur(8px);}
+.badge-mode{background:rgba(201,169,110,0.18);color:#c9a96e;border:1px solid rgba(201,169,110,0.35);}
+.badge-status{background:rgba(0,0,0,0.45);color:#aaa;}
+.badge-status.playing{color:#22c55e;}
+
+/* Caption with the word being played */
+.word-caption{position:absolute;left:50%;top:16px;transform:translateX(-50%);max-width:70%;padding:9px 26px;border-radius:30px;background:rgba(15,18,24,0.55);backdrop-filter:blur(10px);border:1px solid rgba(201,169,110,0.45);color:#fff;font-size:1.7rem;font-weight:700;letter-spacing:0.01em;text-align:center;opacity:0;transition:opacity 0.35s;pointer-events:none;z-index:6;text-transform:capitalize;white-space:nowrap;}
+.word-caption.show{opacity:1;}
+
+/* Viewport controls (replay / slow motion / loop) */
+.vp-controls{position:absolute;left:16px;bottom:20px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;z-index:7;}
+.vp-ctrl-btn{display:flex;align-items:center;gap:6px;padding:9px 16px;border-radius:24px;border:1px solid rgba(255,255,255,0.14);background:rgba(20,20,28,0.7);backdrop-filter:blur(10px);color:#cfcabf;font-size:0.82rem;font-weight:600;cursor:pointer;transition:all 0.18s;font-family:inherit;}
+.vp-ctrl-btn:hover{color:#fff;border-color:rgba(201,169,110,0.5);}
+.vp-ctrl-btn.active{background:rgba(201,169,110,0.92);color:#fff;border-color:transparent;}
+
+/* Side panel (hidden when embedded; the parent page owns the word list) */
+.side-panel{display:none;}
+
+.panel-head{padding:18px 18px 14px;border-bottom:1px solid var(--border);}
+.panel-head h3{font-size:0.95rem;font-weight:700;letter-spacing:-0.01em;color:var(--text);margin-bottom:2px;}
+.panel-head p{font-size:0.75rem;color:var(--muted);}
+
+.panel-body{padding:14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;flex:1;}
+
+/* Search */
+.search-wrap{position:relative;}
+.search-input{width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:0.88rem;outline:none;transition:border-color 0.2s;}
+.search-input:focus{border-color:var(--accent);}
+.search-input::placeholder{color:var(--muted);}
+.suggestions{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;max-height:180px;overflow-y:auto;z-index:100;display:none;box-shadow:0 4px 16px rgba(0,0,0,0.08);}
+.suggestion-item{padding:9px 14px;cursor:pointer;font-size:0.85rem;color:var(--text);transition:background 0.1s;}
+.suggestion-item:hover{background:var(--surface2);}
+
+/* Play button */
+.play-btn{width:100%;padding:11px;border:none;border-radius:8px;background:var(--accent,#c9a96e);color:#fff;font-size:0.88rem;font-weight:600;cursor:pointer;transition:opacity 0.2s;letter-spacing:0.01em;}
+.play-btn:hover{opacity:0.85;}
+.play-btn:disabled{opacity:0.4;cursor:not-allowed;}
+
+/* Status */
+.anim-status{padding:9px 12px;background:var(--surface2);border-radius:8px;font-size:0.78rem;color:var(--muted);border:1px solid var(--border);}
+.anim-status.playing{color:var(--success);}
+.anim-status.error{color:var(--danger);}
+
+/* Playback bar */
+.playback-bar{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);}
+.pb-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:2px 6px;border-radius:4px;transition:color 0.15s;}
+.pb-btn:hover{color:var(--text);}
+.pb-track{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden;}
+.pb-fill{height:100%;background:var(--accent,#c9a96e);width:0%;transition:width 0.05s linear;}
+.pb-counter{font-size:0.68rem;color:var(--muted);white-space:nowrap;}
+
+/* Word list */
+.word-list-label{font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);padding:0 2px;}
+.word-count{font-size:0.68rem;color:var(--muted);font-weight:400;margin-left:6px;text-transform:none;letter-spacing:0;}
+.word-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:5px;max-height:260px;overflow-y:auto;padding-right:2px;}
+.word-chip{padding:7px 8px;background:var(--surface2);border-radius:6px;font-size:0.76rem;text-align:center;cursor:pointer;border:1px solid transparent;transition:all 0.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);}
+.word-chip:hover{border-color:var(--accent);color:var(--accent);}
+.word-chip.active{border-color:var(--accent);background:rgba(201,169,110,0.12);color:var(--accent);font-weight:600;}
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- 3D viewport -->
+  <div class="viewport-wrap">
+    <canvas id="animCanvas"></canvas>
+    <div class="loading-overlay" id="loadingOverlay">
+      <div class="spinner"></div>
+      <span id="loadingText">Avatar yükleniyor...</span>
+    </div>
+    <div class="vp-badge">
+      <span class="badge badge-mode">3D Avatar</span>
+      <span class="badge badge-status" id="vpStatus">Hazırlanıyor</span>
+    </div>
+    <div class="word-caption" id="wordCaption"></div>
+    <div class="vp-controls" id="vpControls">
+      <button class="vp-ctrl-btn" id="vpReplayBtn" onclick="restartAnim()" title="Baştan oynat">⟳ Tekrar</button>
+      <button class="vp-ctrl-btn" id="vpSlowBtn" onclick="toggleSlow()" title="Yavaş çekim">🐢 Yavaş</button>
+      <button class="vp-ctrl-btn" id="vpLoopBtn" onclick="toggleLoop()" title="Döngüde oynat">🔁 Döngü</button>
+    </div>
+  </div>
+
+  <!-- Control panel (standalone use) -->
+  <div class="side-panel">
+    <div class="panel-head">
+      <h3>İşaret Animasyonu</h3>
+      <p>Kelime seçin veya yazın</p>
+    </div>
+
+    <div class="panel-body">
+
+      <!-- Search -->
+      <div class="search-wrap">
+        <input class="search-input" id="wordInput" type="text"
+          placeholder="İşaret ara veya yaz..."
+          autocomplete="off"
+          oninput="onSearchInput()"
+          onkeydown="onSearchKey(event)">
+        <div class="suggestions" id="suggestions"></div>
+      </div>
+
+      <button class="play-btn" id="playBtn" onclick="playCurrentInput()" disabled>Animasyonu Oynat</button>
+
+      <div class="anim-status" id="animStatus">Avatar yükleniyor...</div>
+
+      <!-- Playback -->
+      <div class="playback-bar">
+        <button class="pb-btn" onclick="togglePlay()" id="playPauseBtn">⏸</button>
+        <button class="pb-btn" onclick="restartAnim()">⏮</button>
+        <div class="pb-track"><div class="pb-fill" id="pbFill"></div></div>
+        <span class="pb-counter" id="frameCounter">0/0</span>
+      </div>
+
+      <!-- Word list -->
+      <div class="word-list-label">
+        Tüm İşaretler
+        <span class="word-count" id="wordCount"></span>
+      </div>
+      <div class="word-grid" id="wordGrid">
+        <div style="color:var(--muted);font-size:0.8rem;grid-column:1/-1;padding:8px 0;">Yükleniyor...</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════ */
+var ANIM = {
+  initialized: false, renderer: null, scene: null, camera: null, clock: null, controls: null,
+  playing: true, wordList: [],
+  queue: [], queueIdx: 0, frameIdx: 0, frameTimer: 0,
+  FPS: 15, TRANSITION_FRAMES: 8,
+  speed: 0.9, slowOn: false, loop: false, _capIdx: -1,   // normal speed 0.9, slow motion 0.6; loop flag; index of the captioned word
+  userSpeed: 1.0,         // playback multiplier from the user's settings
+  useIK: true,            // position-preserving two-bone arm IK (false = direction-based retargeting)
+  mirrorX: false, swapLR: false,  // hand side handling; setMirror(1,1) mirrors the source
+  armDepthGain: 0.45,     // Z gain for the IK wrist target; lower keeps hands closer to the body (0 drops hands behind the hips)
+  elbowFollow: 0,         // 0 = pure IK (hands reach the face); >0 bends the elbow but the short arm then misses the face
+  armLengthen: 1.0,       // arm length multiplier (1.0 = original); >1 lets the elbow bend while reaching the face
+  fingerCurl: 16, fingerCurlSign: 1,  // light cosmetic finger curl on top of the landmark directions
+  fingerDepthGain: 1.2,   // Z weight of finger segments; lower values flatten fingers and reduce crossing
+  wristFullOrient: false, palmFlip: false,  // full two-axis wrist orientation (off: made motion less stable)
+  palmRoll: false, palmRollSign: 1,         // palm-roll correction (off: playback was not smooth)
+  // ── Motion quality ──
+  smoothAlpha: 0.85,      // EMA temporal smoothing (1 = off). Landmark data is already smoothed offline,
+                          // so lower values double-smooth and make the hands lag behind fast movements.
+  smoothMaxStep: 0.30,    // per-frame spike limit (relaxed because the data is pre-smoothed)
+  maxDelta: 0.05,         // clamp the frame delta after the tab returns from the background (seconds)
+  bones: {}, joints: {},
+  avatar: null, avatarBones: {}, avatarLoaded: false, avatarLoading: false,
+  returningToRest: false, restBlendT: 0, restBlendDuration: 1.15, restBlendStartQuats: null,
+};
+
+var REST_WORLD_DIR = {}, REST_WORLD_QUAT = {}, REST_LOCAL_QUAT = {};
+var IDLE_LOCAL_QUAT = {};
+var RESOLVED_BONE_MAP = {}, RESOLVED_FINGER_MAP = { Left:{}, Right:{} };
+var PREV_AVATAR_FRAME = null;
+var ARM_LEN = {}; // avatar arm bone lengths measured in the rest pose (for IK)
+var REST_PALM_DIR = {}; // palm normal per hand in the rest pose (for full wrist orientation)
+
+var BONE_MAP = {
+  Hips:      ['mixamorig:Hips',         'mixamorigHips',         'mixamorig7_Hips'],
+  Spine:     ['mixamorig:Spine',        'mixamorigSpine',        'mixamorig7_Spine'],
+  Spine1:    ['mixamorig:Spine1',       'mixamorigSpine1',       'mixamorig7_Spine1'],
+  Spine2:    ['mixamorig:Spine2',       'mixamorigSpine2',       'mixamorig7_Spine2'],
+  Neck:      ['mixamorig:Neck',         'mixamorigNeck',         'mixamorig7_Neck'],
+  Head:      ['mixamorig:Head',         'mixamorigHead',         'mixamorig7_Head'],
+  LShoulder: ['mixamorig:LeftShoulder', 'mixamorigLeftShoulder', 'mixamorig7_LeftShoulder'],
+  LUpperArm: ['mixamorig:LeftArm',      'mixamorigLeftArm',      'mixamorig7_LeftArm'],
+  LForeArm:  ['mixamorig:LeftForeArm',  'mixamorigLeftForeArm',  'mixamorig7_LeftForeArm'],
+  LHand:     ['mixamorig:LeftHand',     'mixamorigLeftHand',     'mixamorig7_LeftHand'],
+  RShoulder: ['mixamorig:RightShoulder','mixamorigRightShoulder','mixamorig7_RightShoulder'],
+  RUpperArm: ['mixamorig:RightArm',     'mixamorigRightArm',     'mixamorig7_RightArm'],
+  RForeArm:  ['mixamorig:RightForeArm', 'mixamorigRightForeArm', 'mixamorig7_RightForeArm'],
+  RHand:     ['mixamorig:RightHand',    'mixamorigRightHand',    'mixamorig7_RightHand'],
+};
+
+var FINGER_MAP = {
+  Left:{
+    Thumb:[
+      ['mixamorig:LeftHandThumb1','mixamorigLeftHandThumb1','mixamorig7_LeftHandThumb1'],
+      ['mixamorig:LeftHandThumb2','mixamorigLeftHandThumb2','mixamorig7_LeftHandThumb2'],
+      ['mixamorig:LeftHandThumb3','mixamorigLeftHandThumb3','mixamorig7_LeftHandThumb3'],
+    ],
+    Index:[
+      ['mixamorig:LeftHandIndex1','mixamorigLeftHandIndex1','mixamorig7_LeftHandIndex1'],
+      ['mixamorig:LeftHandIndex2','mixamorigLeftHandIndex2','mixamorig7_LeftHandIndex2'],
+      ['mixamorig:LeftHandIndex3','mixamorigLeftHandIndex3','mixamorig7_LeftHandIndex3'],
+    ],
+    Middle:[
+      ['mixamorig:LeftHandMiddle1','mixamorigLeftHandMiddle1','mixamorig7_LeftHandMiddle1'],
+      ['mixamorig:LeftHandMiddle2','mixamorigLeftHandMiddle2','mixamorig7_LeftHandMiddle2'],
+      ['mixamorig:LeftHandMiddle3','mixamorigLeftHandMiddle3','mixamorig7_LeftHandMiddle3'],
+    ],
+    Ring:[
+      ['mixamorig:LeftHandRing1','mixamorigLeftHandRing1','mixamorig7_LeftHandRing1'],
+      ['mixamorig:LeftHandRing2','mixamorigLeftHandRing2','mixamorig7_LeftHandRing2'],
+      ['mixamorig:LeftHandRing3','mixamorigLeftHandRing3','mixamorig7_LeftHandRing3'],
+    ],
+    Pinky:[
+      ['mixamorig:LeftHandPinky1','mixamorigLeftHandPinky1','mixamorig7_LeftHandPinky1'],
+      ['mixamorig:LeftHandPinky2','mixamorigLeftHandPinky2','mixamorig7_LeftHandPinky2'],
+      ['mixamorig:LeftHandPinky3','mixamorigLeftHandPinky3','mixamorig7_LeftHandPinky3'],
+    ],
+  },
+  Right:{
+    Thumb:[
+      ['mixamorig:RightHandThumb1','mixamorigRightHandThumb1','mixamorig7_RightHandThumb1'],
+      ['mixamorig:RightHandThumb2','mixamorigRightHandThumb2','mixamorig7_RightHandThumb2'],
+      ['mixamorig:RightHandThumb3','mixamorigRightHandThumb3','mixamorig7_RightHandThumb3'],
+    ],
+    Index:[
+      ['mixamorig:RightHandIndex1','mixamorigRightHandIndex1','mixamorig7_RightHandIndex1'],
+      ['mixamorig:RightHandIndex2','mixamorigRightHandIndex2','mixamorig7_RightHandIndex2'],
+      ['mixamorig:RightHandIndex3','mixamorigRightHandIndex3','mixamorig7_RightHandIndex3'],
+    ],
+    Middle:[
+      ['mixamorig:RightHandMiddle1','mixamorigRightHandMiddle1','mixamorig7_RightHandMiddle1'],
+      ['mixamorig:RightHandMiddle2','mixamorigRightHandMiddle2','mixamorig7_RightHandMiddle2'],
+      ['mixamorig:RightHandMiddle3','mixamorigRightHandMiddle3','mixamorig7_RightHandMiddle3'],
+    ],
+    Ring:[
+      ['mixamorig:RightHandRing1','mixamorigRightHandRing1','mixamorig7_RightHandRing1'],
+      ['mixamorig:RightHandRing2','mixamorigRightHandRing2','mixamorig7_RightHandRing2'],
+      ['mixamorig:RightHandRing3','mixamorigRightHandRing3','mixamorig7_RightHandRing3'],
+    ],
+    Pinky:[
+      ['mixamorig:RightHandPinky1','mixamorigRightHandPinky1','mixamorig7_RightHandPinky1'],
+      ['mixamorig:RightHandPinky2','mixamorigRightHandPinky2','mixamorig7_RightHandPinky2'],
+      ['mixamorig:RightHandPinky3','mixamorigRightHandPinky3','mixamorig7_RightHandPinky3'],
+    ],
+  }
+};
+
+/* ═══════════════════════════════════════════════
+   THREE.JS INIT
+═══════════════════════════════════════════════ */
+/** Soft vertical studio gradient (light slate on top, dark at the bottom) so dark hair stays visible. */
+function makeStudioBg(){
+  var c=document.createElement('canvas'); c.width=4; c.height=256;
+  var g=c.getContext('2d');
+  var grad=g.createLinearGradient(0,0,0,256);
+  grad.addColorStop(0,'#717c90');     // top: light slate
+  grad.addColorStop(0.5,'#4b5566');
+  grad.addColorStop(1,'#2c333f');     // bottom: dark slate
+  g.fillStyle=grad; g.fillRect(0,0,4,256);
+  var tex=new THREE.CanvasTexture(c);
+  if(THREE.sRGBEncoding!==undefined) tex.encoding=THREE.sRGBEncoding;
+  return tex;
+}
+
+function initAnim() {
+  if(ANIM.initialized) return;
+  ANIM.initialized = true;
+  var c = document.getElementById('animCanvas');
+  var w = c.clientWidth||800, h = c.clientHeight||600;
+  ANIM.renderer = new THREE.WebGLRenderer({canvas:c, antialias:true, alpha:false});
+  ANIM.renderer.setSize(w,h,false);
+  ANIM.renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  ANIM.renderer.shadowMap.enabled = true;
+  ANIM.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  ANIM.renderer.toneMappingExposure = 1.1;
+  ANIM.renderer.localClippingEnabled = false;
+  ANIM.scene = new THREE.Scene();
+  ANIM.scene.background = makeStudioBg();
+
+  // Lights
+  ANIM.scene.add(new THREE.AmbientLight(0xfff8f0, 0.9));
+  var key = new THREE.DirectionalLight(0xfff5e0,1.1); key.position.set(1.5,3,2); key.castShadow=true; ANIM.scene.add(key);
+  var fill = new THREE.DirectionalLight(0xc0d8ff,0.35); fill.position.set(-2,1.5,-1); ANIM.scene.add(fill);
+  var rim = new THREE.DirectionalLight(0xffe0a0,0.2); rim.position.set(0,-1,3); ANIM.scene.add(rim);
+
+  // Floor grid
+  var grid = new THREE.GridHelper(3,12,0x222222,0x1a1a1a); grid.position.y=-1.05; ANIM.scene.add(grid);
+
+  // Camera aimed at the upper body
+  ANIM.camera = new THREE.PerspectiveCamera(58, w/h, 0.01, 50);
+  ANIM.camera.position.set(0, 0.5, 3.2);
+  ANIM.camera.lookAt(0, 0.7, 0);
+
+  ANIM.controls = new THREE.OrbitControls(ANIM.camera, c);
+  ANIM.controls.enableDamping = true;
+  ANIM.controls.dampingFactor = 0.08;
+  ANIM.controls.minDistance = 0.8;
+  ANIM.controls.maxDistance = 4;
+  ANIM.controls.target.set(0, 0.3, 0);
+
+  ANIM.clock = new THREE.Clock();
+
+  window.addEventListener('resize', function(){
+    var c2=document.getElementById('animCanvas');
+    ANIM.camera.aspect=c2.clientWidth/c2.clientHeight;
+    ANIM.camera.updateProjectionMatrix();
+    ANIM.renderer.setSize(c2.clientWidth,c2.clientHeight,false);
+  });
+
+  // Load the word list
+  fetch('/signs').then(function(r){return r.json();}).then(function(data){
+    ANIM.wordList = data.words||[];
+    buildWordGrid(ANIM.wordList);
+    document.getElementById('wordCount').textContent = ANIM.wordList.length + ' işaret';
+    document.getElementById('playBtn').disabled = false;
+    setAnimStatus('Avatar hazır — kelime seçin','');
+  });
+
+  animLoop();
+}
+
+/* ═══════════════════════════════════════════════
+   AVATAR LOADING
+═══════════════════════════════════════════════ */
+function loadAvatar(url, isObjectURL) {
+  ANIM.avatarLoading = true;
+  setLoading('Avatar yükleniyor...');
+  var loader = new THREE.GLTFLoader();
+  loader.load(url, function(gltf){
+    if(ANIM.avatar) ANIM.scene.remove(ANIM.avatar);
+    ANIM.avatar = gltf.scene;
+    ANIM.avatarBones = {};
+    ANIM.avatar.traverse(function(obj){
+      if(obj.isBone||obj.type==='Bone') ANIM.avatarBones[obj.name]=obj;
+      if(obj.isMesh){
+        obj.castShadow=true; obj.receiveShadow=true;
+        obj.frustumCulled=false; // the skinned mesh bind box would otherwise cull it by mistake
+      }
+    });
+    ANIM.scene.add(ANIM.avatar);
+    requestAnimationFrame(function(){
+      ANIM.avatar.updateMatrixWorld(true);
+      normalizeAvatarTransform(); // consistent size and position for any rig (cm → m, centered)
+      ANIM.renderer.render(ANIM.scene, ANIM.camera);
+      resolveRigMaps();
+      lengthenArms();
+      measureRestPose();
+      createIdlePose();
+      hideLowerBody();      // hide separate leg meshes, if any
+      frameUpperBody();     // clip below the waist and frame the upper body
+      exposeAvatarDebugTools();
+      ANIM.avatarLoaded=true; ANIM.avatarLoading=false;
+      if(isObjectURL) URL.revokeObjectURL(url);
+      hideLoading();
+      document.getElementById('vpStatus').textContent='Hazır';
+      document.getElementById('vpStatus').classList.add('playing');
+      setAnimStatus('Avatar hazır — kelime seçin','');
+      console.log('[Avatar] Bones:', Object.keys(ANIM.avatarBones).length);
+    });
+  }, function(xhr){
+    if(xhr.total>0) setLoading('Yükleniyor... %'+Math.round(xhr.loaded/xhr.total*100));
+  }, function(err){
+    ANIM.avatarLoading=false;
+    console.error('[Avatar] Load failed:', err);
+    setLoading('Avatar yüklenemedi');
+    setAnimStatus('Avatar yüklenemedi','error');
+  });
+}
+
+function setLoading(txt){ document.getElementById('loadingText').textContent=txt; }
+function hideLoading(){ document.getElementById('loadingOverlay').style.display='none'; }
+
+/* ═══════════════════════════════════════════════
+   AVATAR NORMALIZE — rig-independent scale and position
+   Mixamo GLBs arrive in centimetres (~178 units) or metres (~1.8 units).
+   Measure the bounding box, scale to the target height, center horizontally
+   and put the feet on the floor. A uniform scale keeps bone directions intact.
+═══════════════════════════════════════════════ */
+var AVATAR_TARGET_HEIGHT = 1.8; // metres
+function normalizeAvatarTransform(){
+  if(!ANIM.avatar) return;
+  ANIM.avatar.scale.setScalar(1);
+  ANIM.avatar.position.set(0,0,0);
+  ANIM.avatar.updateMatrixWorld(true);
+  var box=new THREE.Box3().setFromObject(ANIM.avatar);
+  if(!isFinite(box.min.y)||!isFinite(box.max.y)) return;
+  var size=new THREE.Vector3(); box.getSize(size);
+  var h=size.y||1;
+  var s=AVATAR_TARGET_HEIGHT/h;
+  ANIM.avatar.scale.setScalar(s);
+  ANIM.avatar.updateMatrixWorld(true);
+  // measure again after scaling, center horizontally and put the feet at y=0
+  box.setFromObject(ANIM.avatar);
+  var center=new THREE.Vector3(); box.getCenter(center);
+  ANIM.avatar.position.x-=center.x;
+  ANIM.avatar.position.z-=center.z;
+  ANIM.avatar.position.y-=box.min.y;
+  ANIM.avatar.updateMatrixWorld(true);
+  console.log('[Avatar] Normalized: scale',s.toFixed(4),'| raw height',h.toFixed(2));
+}
+
+/* ═══════════════════════════════════════════════
+   UPPER BODY FOCUS — clip below the waist and frame the camera
+   Hiding meshes is not enough for single-piece skinned meshes, so a global
+   clipping plane at waist height cuts the scene regardless of mesh layout.
+   The camera then aims at the center of the upper body.
+═══════════════════════════════════════════════ */
+function frameUpperBody(){
+  if(!ANIM.avatar||!ANIM.camera||!ANIM.controls||!ANIM.renderer) return;
+  // Apply the idle pose first so the clip and framing match the real stance
+  if(typeof applyIdlePose==='function') applyIdlePose();
+  ANIM.avatar.updateMatrixWorld(true);
+  var box=new THREE.Box3().setFromObject(ANIM.avatar);
+  var topY=isFinite(box.max.y)?box.max.y:1.75;
+  var botY=isFinite(box.min.y)?box.min.y:0.0;
+  ANIM.headTopY=topY; // vertical IK reference: top of the head (the Head bone sits at the base of the skull)
+  // Hip height: world Y of the Hips bone, otherwise ~52% of the height
+  var hipsY=botY+(topY-botY)*0.52;
+  var hipsBn=RESOLVED_BONE_MAP.Hips;
+  if(hipsBn&&ANIM.avatarBones[hipsBn]){
+    var hp=new THREE.Vector3(); ANIM.avatarBones[hipsBn].getWorldPosition(hp);
+    if(isFinite(hp.y)) hipsY=hp.y;
+  }
+  // Lowest world Y of the hands (wrists and every finger bone) in the idle pose.
+  // The clip line goes below them so the hands are never cut.
+  var handMinY=Infinity;
+  var handBones=[RESOLVED_BONE_MAP.LHand,RESOLVED_BONE_MAP.RHand];
+  ['Left','Right'].forEach(function(s){
+    Object.keys(RESOLVED_FINGER_MAP[s]).forEach(function(f){
+      (RESOLVED_FINGER_MAP[s][f]||[]).forEach(function(bn){ handBones.push(bn); });
+    });
+  });
+  handBones.forEach(function(bn){
+    if(bn&&ANIM.avatarBones[bn]){
+      var p=new THREE.Vector3(); ANIM.avatarBones[bn].getWorldPosition(p);
+      if(isFinite(p.y)&&p.y<handMinY) handMinY=p.y;
+    }
+  });
+  // Clip at the hips, or slightly below the idle hands if they hang lower
+  var clipY=hipsY;
+  if(isFinite(handMinY)) clipY=Math.min(hipsY, handMinY-0.06);
+  ANIM.renderer.clippingPlanes=[ new THREE.Plane(new THREE.Vector3(0,1,0), -clipY) ];
+  // Frame from the waist cut to above the head (room for raised hands) as tightly as possible;
+  // the camera distance follows from the vertical and horizontal spans.
+  var headroom=0.48;                 // space above the head for raised hands
+  var visTop=topY+headroom, visBot=clipY;
+  var midY=(visTop+visBot)/2;
+  var spanY=(visTop-visBot);
+  var spanX=1.58;                    // horizontal span for open arms
+  var half=ANIM.camera.fov*Math.PI/180/2;
+  var aspect=ANIM.camera.aspect||(16/9);
+  var distY=(spanY/2)/Math.tan(half);
+  var distX=(spanX/2)/(Math.tan(half)*aspect);
+  var dist=Math.max(distY,distX)*1.04; // small safety margin
+  var ang=14*Math.PI/180;            // slight side angle for depth
+  var bottomPan=0.09;                // shift the avatar up so low hands stay above the control buttons
+  var tY=midY-bottomPan;
+  ANIM.controls.target.set(0, tY, 0);
+  ANIM.camera.position.set(Math.sin(ang)*dist, tY, Math.cos(ang)*dist);
+  ANIM.camera.lookAt(0, tY, 0);
+  ANIM.camera.near=0.01; ANIM.camera.updateProjectionMatrix();
+  ANIM.controls.minDistance=0.5; ANIM.controls.maxDistance=dist*1.7;
+  ANIM.controls.update();
+  console.log('[Avatar] Clip y<'+clipY.toFixed(2)+' (hips '+hipsY.toFixed(2)+', hand-min '+(isFinite(handMinY)?handMinY.toFixed(2):'?')+')');
+}
+
+/* ═══════════════════════════════════════════════
+   LOWER BODY HIDE — bone based
+═══════════════════════════════════════════════ */
+function hideLowerBody() {
+  if (!ANIM.avatar) return;
+
+  function matchesLower(name) {
+    var n = name.toLowerCase().replace(/[^a-z]/g,'');
+    var checks = ['hip','pelvis','upleg','thigh','leg','knee','foot','toe','shin','calf','boot','shoe','pant','trouser'];
+    return checks.some(function(k){ return n.includes(k); });
+  }
+
+  // Hide a mesh when its name or any bone in its parent chain belongs to the lower body
+  ANIM.avatar.traverse(function(obj) {
+    if (!obj.isMesh) return;
+    if (matchesLower(obj.name)) { obj.visible = false; return; }
+    var parent = obj.parent;
+    while (parent) {
+      if ((parent.isBone || parent.type === 'Bone') && matchesLower(parent.name)) {
+        obj.visible = false;
+        return;
+      }
+      parent = parent.parent;
+    }
+  });
+  console.log('[Avatar] Lower body hidden');
+}
+
+/* ═══════════════════════════════════════════════
+   RIG MAPPING
+═══════════════════════════════════════════════ */
+function normBone(n){ return String(n||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
+function resolveBoneName(candidates){
+  if(!Array.isArray(candidates)) candidates=[candidates];
+  for(var i=0;i<candidates.length;i++) if(ANIM.avatarBones[candidates[i]]) return candidates[i];
+  var norm={}; Object.keys(ANIM.avatarBones).forEach(function(n){ norm[normBone(n)]=n; });
+  for(var j=0;j<candidates.length;j++){ var h=norm[normBone(candidates[j])]; if(h) return h; }
+  return null;
+}
+function resolveRigMaps(){
+  RESOLVED_BONE_MAP={};
+  RESOLVED_FINGER_MAP={Left:{},Right:{}};
+  Object.keys(BONE_MAP).forEach(function(k){ RESOLVED_BONE_MAP[k]=resolveBoneName(BONE_MAP[k]); });
+  ['Left','Right'].forEach(function(s){
+    Object.keys(FINGER_MAP[s]).forEach(function(f){
+      RESOLVED_FINGER_MAP[s][f]=FINGER_MAP[s][f].map(function(c){ return resolveBoneName(c); });
+    });
+  });
+}
+/** Lengthen the avatar's short arms by scaling the local position of the ForeArm and
+ *  Hand bones. Longer arms let the elbow bend naturally while the hand reaches the
+ *  face. Must run before measureRestPose so ARM_LEN reflects the new length. */
+var _ARM_ORIG_POS = {};
+function lengthenArms(){
+  if(!ANIM.avatar) return;
+  var k = (ANIM.armLengthen!=null?ANIM.armLengthen:1.0);
+  ['L','R'].forEach(function(s){
+    [s+'ForeArm', s+'Hand'].forEach(function(key){
+      var bn=RESOLVED_BONE_MAP[key]; if(!bn) return;
+      var bone=ANIM.avatarBones[bn]; if(!bone) return;
+      if(!_ARM_ORIG_POS[bn]) _ARM_ORIG_POS[bn]=bone.position.clone();
+      bone.position.copy(_ARM_ORIG_POS[bn]).multiplyScalar(k);
+    });
+  });
+  ANIM.avatar.updateMatrixWorld(true);
+}
+function measureRestPose(){
+  REST_WORLD_DIR={}; REST_WORLD_QUAT={}; REST_LOCAL_QUAT={};
+  if(!ANIM.avatar) return;
+  ANIM.avatar.updateMatrixWorld(true);
+  function reg(bn){
+    if(!bn) return;
+    var bone=ANIM.avatarBones[bn]; if(!bone) return;
+    REST_LOCAL_QUAT[bn]=bone.quaternion.clone();
+    var wq=new THREE.Quaternion(); bone.getWorldQuaternion(wq); REST_WORLD_QUAT[bn]=wq.clone();
+    var bwp=new THREE.Vector3(); bone.getWorldPosition(bwp);
+    var bestBone=null,bestBoneLen=0, bestAny=null,bestAnyLen=0;
+    bone.children.forEach(function(ch){
+      var cp=new THREE.Vector3(); ch.getWorldPosition(cp);
+      var l=cp.distanceTo(bwp);
+      if(l>bestAnyLen){bestAnyLen=l;bestAny=cp;}
+      if((ch.isBone||ch.type==='Bone')&&l>bestBoneLen){bestBoneLen=l;bestBone=cp;}
+    });
+    // Prefer the farthest bone child, then the end (_End) node, so distal phalanx directions are right
+    var best=bestBone||bestAny, bestLen=bestBone?bestBoneLen:bestAnyLen;
+    var wd=best&&bestLen>1e-4
+      ?new THREE.Vector3().subVectors(best,bwp).normalize()
+      :new THREE.Vector3(0,1,0).applyQuaternion(wq).normalize();
+    REST_WORLD_DIR[bn]=wd;
+  }
+  Object.keys(RESOLVED_BONE_MAP).forEach(function(k){ reg(RESOLVED_BONE_MAP[k]); });
+  ['Left','Right'].forEach(function(s){ Object.keys(RESOLVED_FINGER_MAP[s]).forEach(function(f){ RESOLVED_FINGER_MAP[s][f].forEach(reg); }); });
+  // Arm bone lengths for IK (world distance in the rest pose)
+  ARM_LEN={};
+  function blen(a,b){ var A=ANIM.avatarBones[a],B=ANIM.avatarBones[b]; if(!A||!B) return 0; var pa=new THREE.Vector3(),pb=new THREE.Vector3(); A.getWorldPosition(pa); B.getWorldPosition(pb); return pa.distanceTo(pb); }
+  ARM_LEN.LeftUpper =blen(RESOLVED_BONE_MAP.LUpperArm,RESOLVED_BONE_MAP.LForeArm);
+  ARM_LEN.LeftFore  =blen(RESOLVED_BONE_MAP.LForeArm, RESOLVED_BONE_MAP.LHand);
+  ARM_LEN.RightUpper=blen(RESOLVED_BONE_MAP.RUpperArm,RESOLVED_BONE_MAP.RForeArm);
+  ARM_LEN.RightFore =blen(RESOLVED_BONE_MAP.RForeArm, RESOLVED_BONE_MAP.RHand);
+  console.log('[Avatar] Arm lengths:', JSON.stringify(Object.keys(ARM_LEN).reduce(function(o,k){o[k]=+ARM_LEN[k].toFixed(3);return o;},{})));
+  // Rest palm normal: cross(index - wrist, pinky - wrist). Uses the same convention as the
+  // landmark palm normal at runtime so full wrist orientation maps the palm correctly.
+  REST_PALM_DIR={};
+  function wpos(bn){ if(!bn||!ANIM.avatarBones[bn]) return null; var v=new THREE.Vector3(); ANIM.avatarBones[bn].getWorldPosition(v); return v; }
+  ['Left','Right'].forEach(function(s){
+    var handBn=s==='Left'?RESOLVED_BONE_MAP.LHand:RESOLVED_BONE_MAP.RHand;
+    var idxBn=(RESOLVED_FINGER_MAP[s].Index||[])[0], pkyBn=(RESOLVED_FINGER_MAP[s].Pinky||[])[0];
+    var wp=wpos(handBn), ip=wpos(idxBn), pp=wpos(pkyBn);
+    if(wp&&ip&&pp){
+      var pn=new THREE.Vector3().crossVectors(ip.clone().sub(wp), pp.clone().sub(wp));
+      if(pn.lengthSq()>1e-8) REST_PALM_DIR[s]=pn.normalize();
+    }
+  });
+}
+/** Build a natural idle pose with the arms down instead of the T-pose. */
+function createIdlePose(){
+  IDLE_LOCAL_QUAT={};
+  Object.keys(REST_LOCAL_QUAT).forEach(function(bn){
+    IDLE_LOCAL_QUAT[bn]=REST_LOCAL_QUAT[bn].clone();
+  });
+  function rotateIdleBone(bn,axis,angleDeg){
+    if(!bn||!IDLE_LOCAL_QUAT[bn]) return;
+    var rad=angleDeg*Math.PI/180;
+    var q=new THREE.Quaternion().setFromAxisAngle(axis,rad);
+    IDLE_LOCAL_QUAT[bn].premultiply(q);
+  }
+  var xAxis=new THREE.Vector3(1,0,0);
+  rotateIdleBone(RESOLVED_BONE_MAP.LUpperArm,xAxis,70);
+  rotateIdleBone(RESOLVED_BONE_MAP.LForeArm,xAxis,10);
+  rotateIdleBone(RESOLVED_BONE_MAP.RUpperArm,xAxis,70);
+  rotateIdleBone(RESOLVED_BONE_MAP.RForeArm,xAxis,10);
+  console.log('[Avatar] Idle pose created (arms down)');
+}
+/** Tuning helpers for the browser console, available on this iframe's window
+ *  as `signturkAvatar` (e.g. signturkAvatar.setElbow(0.3)). */
+function exposeAvatarDebugTools(){
+  window.signturkAvatar = {
+    anim: ANIM,
+    boneMap: RESOLVED_BONE_MAP,
+    fingerMap: RESOLVED_FINGER_MAP,
+    restWorldDir: REST_WORLD_DIR,
+    restLocalQuat: REST_LOCAL_QUAT,
+    /** Toggle IK to compare with direction-based retargeting */
+    toggleIK: function(){ ANIM.useIK=!ANIM.useIK; console.log('[Avatar] useIK =', ANIM.useIK); return ANIM.useIK; },
+    /** Mirror / swap combinations: setMirror(mirrorX, swapLR) with 0/1 */
+    setMirror: function(m,s){ if(m!=null) ANIM.mirrorX=!!(m&&m!=='0'); if(s!=null) ANIM.swapLR=!!(s&&s!=='0'); console.log('[Avatar] mirrorX =', ANIM.mirrorX, '| swapLR =', ANIM.swapLR); return {mirrorX:ANIM.mirrorX, swapLR:ANIM.swapLR}; },
+    /** Finger tuning: setFinger(curl, depthGain); curl=0 plays raw landmark motion, lower depthGain reduces crossing and jitter */
+    setFinger: function(curl,depth){ if(curl!=null) ANIM.fingerCurl=Number(curl); if(depth!=null) ANIM.fingerDepthGain=Number(depth); console.log('[Avatar] fingerCurl =', ANIM.fingerCurl, '| fingerDepthGain =', ANIM.fingerDepthGain); return {fingerCurl:ANIM.fingerCurl, fingerDepthGain:ANIM.fingerDepthGain}; },
+    /** Elbow bend tracking: setElbow(0..1); 0 = straight arm, 1 = full source angle */
+    setElbow: function(x){ if(x!=null) ANIM.elbowFollow=Number(x); console.log('[Avatar] elbowFollow =', ANIM.elbowFollow); return ANIM.elbowFollow; },
+    /** Arm length: setArmLen(k); k>1 lengthens the arm and re-measures the rest pose */
+    setArmLen: function(k){ if(k!=null) ANIM.armLengthen=Number(k); lengthenArms(); measureRestPose(); createIdlePose(); applyIdlePose(); frameUpperBody(); console.log('[Avatar] armLengthen =', ANIM.armLengthen, '| arm length', (ARM_LEN.LeftUpper+ARM_LEN.LeftFore).toFixed(3)); return ANIM.armLengthen; },
+    /** Print key landmarks of the middle frame of a word */
+    inspectLandmark: async function(word){
+      var res = await fetch('/landmark/'+encodeURIComponent(word));
+      var data = await res.json();
+      if(!data.frames||!data.frames.length){ console.log('No frames'); return; }
+      var f = data.frames[Math.floor(data.frames.length/2)];
+      console.log('Word:', word, '| frames:', data.frames.length);
+      var pose = f.pose || {};
+      console.log('  Nose (0):', pose['0']);
+      console.log('  Left shoulder (11):', pose['11']);
+      console.log('  Right shoulder (12):', pose['12']);
+      console.log('  Left elbow (13):', pose['13']);
+      console.log('  Left wrist (15):', pose['15']);
+      console.log('  Left hand present:', !!f.left_hand, f.left_hand ? '('+f.left_hand.length+' points)' : '');
+      var lW = pose['15'] ? [(pose['15'][0]-0.5), -(pose['15'][1]-0.5), -pose['15'][2]] : null;
+      var nose = pose['0'] ? [(pose['0'][0]-0.5), -(pose['0'][1]-0.5), -pose['0'][2]] : null;
+      if(lW && nose){
+        var dist = Math.sqrt(Math.pow(lW[0]-nose[0],2)+Math.pow(lW[1]-nose[1],2)+Math.pow(lW[2]-nose[2],2));
+        console.log('  Wrist-nose distance:', dist.toFixed(3), dist < 0.15 ? '(close: the hand should touch the face)' : '');
+      }
+      return data;
+    },
+  };
+}
+
+/* ═══════════════════════════════════════════════
+   RETARGETING
+═══════════════════════════════════════════════ */
+/** MediaPipe → Three.js conversion:
+ *  - X: mirrored source (the signer's left shoulder has x>0.5 in MediaPipe,
+ *    but seen from the avatar the anatomical left shoulder sits on -X)
+ *  - Y: image Y points down, Three.js Y points up (flipped)
+ *  - Z: negative MediaPipe Z = closer to the camera = in front of the avatar (-Z)
+ */
+function lmVec(pose,idx){ var p=pose[String(idx)]; if(!p) return null; var sx=ANIM.mirrorX?-1:1; return new THREE.Vector3(sx*(p[0]-0.5),-(p[1]-0.5),-p[2]); }
+// Hand depth gain: MediaPipe hand Z is compressed (~3x, measured z/xy ≈ 0.32). Scaling the
+// Z part of the wrist-relative offset makes finger and palm orientation read better in depth.
+// It scales the existing signal; it does not invent motion.
+var HAND_DEPTH_GAIN = 1.2;  // higher values amplify hand-Z noise and cross the fingers
+function handOffsetVec(hand,idx,depthGain){ if(!hand||!hand[idx]||!hand[0]) return null; var p=hand[idx],w=hand[0]; var sx=ANIM.mirrorX?-1:1; var g=(depthGain!=null?depthGain:HAND_DEPTH_GAIN); return new THREE.Vector3(sx*(p[0]-w[0]),-(p[1]-w[1]),-(p[2]-w[2])*g); }
+function resetBone(bn){ var b=ANIM.avatarBones[bn]; if(b&&REST_LOCAL_QUAT[bn]) b.quaternion.copy(REST_LOCAL_QUAT[bn]); }
+function resetDrivenBones(){
+  Object.keys(RESOLVED_BONE_MAP).forEach(function(k){ if(RESOLVED_BONE_MAP[k]) resetBone(RESOLVED_BONE_MAP[k]); });
+  ['Left','Right'].forEach(function(s){ Object.keys(RESOLVED_FINGER_MAP[s]).forEach(function(f){ RESOLVED_FINGER_MAP[s][f].forEach(function(n){ if(n) resetBone(n); }); }); });
+}
+function rotateBoneToWorldDir(bn,targetWD,lerp){
+  if(!bn) return; var bone=ANIM.avatarBones[bn]; if(!bone) return;
+  var rwd=REST_WORLD_DIR[bn],rwq=REST_WORLD_QUAT[bn]; if(!rwd||!rwq) return;
+  if(!targetWD||targetWD.lengthSq()<1e-6) return;
+  var twd=targetWD.clone().normalize(), rwd2=rwd.clone().normalize();
+  var delta=new THREE.Quaternion().setFromUnitVectors(rwd2,twd);
+  var twq=delta.clone().multiply(rwq);
+  var pwq=new THREE.Quaternion(); if(bone.parent) bone.parent.getWorldQuaternion(pwq);
+  var tlq=pwq.clone().invert().multiply(twq);
+  bone.quaternion.slerp(tlq,lerp!=null?lerp:0.6);
+}
+function aimBone(bn,from,to,lerp){ if(!bn||!from||!to) return; var d=new THREE.Vector3().subVectors(to,from); if(d.lengthSq()<1e-6) return; rotateBoneToWorldDir(bn,d,lerp); }
+function boneWorldPos(bn){ if(!bn||!ANIM.avatarBones[bn]) return null; var v=new THREE.Vector3(); ANIM.avatarBones[bn].getWorldPosition(v); return v; }
+
+/** Map a source (lmVec) point into avatar world space with a torso-anchored, anisotropic scale.
+ *  The horizontal scale comes from shoulder width and the vertical scale from shoulder→head
+ *  distance, so a hand at nose height reaches the avatar's head and a hand on the torso
+ *  lands on the avatar's torso. */
+function ikMapPoint(map,P){
+  return new THREE.Vector3(
+    map.O.x + (P.x-map.o.x)*map.sx,
+    map.O.y + (P.y-map.o.y)*map.sy,
+    map.O.z + (P.z-map.o.z)*map.sz);
+}
+
+/** Position-preserving two-bone arm IK.
+ *  The wrist target is mapped into avatar space with ikMapPoint, which keeps contacts
+ *  such as hand-to-head, hand-to-torso and hand-to-hand (direction-based FK loses them).
+ *  The elbow bend is solved with the law of cosines; the bend direction comes from the
+ *  source elbow. Bones are driven through rotateBoneToWorldDir, so the smoothing and
+ *  finger layers still apply. */
+function applyArmIK(side, Esrc, Wsrc, map, lerpU, lerpF, Ssrc){
+  var upperBn = side==='Left'?RESOLVED_BONE_MAP.LUpperArm:RESOLVED_BONE_MAP.RUpperArm;
+  var foreBn  = side==='Left'?RESOLVED_BONE_MAP.LForeArm :RESOLVED_BONE_MAP.RForeArm;
+  if(!upperBn||!foreBn||!map||!Wsrc) return false;
+  var La1=ARM_LEN[side+'Upper'], La2=ARM_LEN[side+'Fore'];
+  if(!La1||!La2) return false;
+  var Sa=boneWorldPos(upperBn); if(!Sa) return false;
+  // Target wrist: torso-anchored mapping into avatar world space
+  var Tw=ikMapPoint(map,Wsrc);
+  var toT=Tw.clone().sub(Sa); var L=toT.length();
+  if(L<1e-5) return false;
+  var maxR=(La1+La2)*0.999, minR=Math.abs(La1-La2)*1.001+1e-4;
+  L=Math.max(minR,Math.min(maxR,L)); // clamp to reach so a far target does not lock the arm straight
+  // ── FOLLOW THE SOURCE ELBOW BEND ──
+  // With a short avatar arm, pure IK pushes the target to the reach limit and straightens
+  // the elbow. Taking the signer's real elbow angle (shoulder-elbow-wrist) and pulling L
+  // toward the shoulder-wrist distance that produces it (dSrc) keeps the elbow bent, so
+  // face-contact signs look natural. The direction (n) still points at the target.
+  // (elbowFollow = 0 gives the pure-IK straight arm.)
+  var ef = (ANIM.elbowFollow!=null?ANIM.elbowFollow:0.8);
+  if(ef>0 && Ssrc && Esrc){
+    var u1=Ssrc.clone().sub(Esrc), u2=Wsrc.clone().sub(Esrc);
+    if(u1.lengthSq()>1e-9 && u2.lengthSq()>1e-9){
+      var ct=Math.max(-1,Math.min(1,u1.normalize().dot(u2.normalize())));
+      var dSrc=Math.sqrt(Math.max(0,La1*La1+La2*La2-2*La1*La2*ct)); // shoulder-wrist distance for this elbow angle
+      dSrc=Math.max(minR,Math.min(maxR,dSrc));
+      L = L*(1-ef) + dSrc*ef;
+    }
+  }
+  var n=toT.clone().normalize();
+  // Bend plane: component of the (mapped) source elbow perpendicular to the target axis
+  var bendDir=null;
+  if(Esrc){
+    var pole=ikMapPoint(map,Esrc).sub(Sa);
+    var proj=pole.addScaledVector(n,-pole.dot(n));
+    if(proj.lengthSq()>1e-8) bendDir=proj.normalize();
+  }
+  if(!bendDir){ // fallback: bend downwards
+    var dn=new THREE.Vector3(0,-1,0); dn.addScaledVector(n,-dn.dot(n));
+    bendDir = dn.lengthSq()<1e-8 ? new THREE.Vector3(0,0,-1) : dn.normalize();
+  }
+  var cosA=Math.max(-1,Math.min(1,(La1*La1+L*L-La2*La2)/(2*La1*L)));
+  var a=Math.acos(cosA);
+  var elbow=Sa.clone().addScaledVector(n,La1*Math.cos(a)).addScaledVector(bendDir,La1*Math.sin(a));
+  // Drive the upper arm to the elbow target, then aim from the ACTUAL elbow to the wrist
+  rotateBoneToWorldDir(upperBn, elbow.clone().sub(Sa), lerpU);
+  var elbowNow=boneWorldPos(foreBn)||elbow;
+  rotateBoneToWorldDir(foreBn, Tw.clone().sub(elbowNow), lerpF);
+  return true;
+}
+function captureRestBlendStart(){
+  ANIM.restBlendStartQuats={};
+  function cap(bn){
+    if(!bn) return;
+    var b=ANIM.avatarBones[bn];
+    if(!b) return;
+    ANIM.restBlendStartQuats[bn]=b.quaternion.clone();
+  }
+  Object.keys(RESOLVED_BONE_MAP).forEach(function(k){ cap(RESOLVED_BONE_MAP[k]); });
+  ['Left','Right'].forEach(function(s){
+    Object.keys(RESOLVED_FINGER_MAP[s]).forEach(function(f){
+      RESOLVED_FINGER_MAP[s][f].forEach(function(n){ cap(n); });
+    });
+  });
+}
+function updateRestBlend(delta){
+  if(!ANIM.restBlendStartQuats||!ANIM.avatar) return;
+  ANIM.restBlendT+=delta/ANIM.restBlendDuration;
+  var u=Math.min(1,ANIM.restBlendT);
+  var alpha=1-Math.pow(1-u,2.25);
+  function blendOne(bn,useIdle){
+    if(!bn) return;
+    var b=ANIM.avatarBones[bn],st=ANIM.restBlendStartQuats[bn];
+    var target=(useIdle&&IDLE_LOCAL_QUAT[bn])?IDLE_LOCAL_QUAT[bn]:REST_LOCAL_QUAT[bn];
+    if(!b||!st||!target) return;
+    b.quaternion.copy(st).slerp(target,alpha);
+  }
+  Object.keys(RESOLVED_BONE_MAP).forEach(function(k){ blendOne(RESOLVED_BONE_MAP[k],true); });
+  ['Left','Right'].forEach(function(s){
+    Object.keys(RESOLVED_FINGER_MAP[s]).forEach(function(f){
+      RESOLVED_FINGER_MAP[s][f].forEach(function(n){ blendOne(n,false); });
+    });
+  });
+  ANIM.avatar.updateMatrixWorld(true);
+  if(u>=1){
+    ANIM.returningToRest=false;
+    ANIM.restBlendStartQuats=null;
+    ANIM.restBlendT=0;
+    applyIdlePose();
+    ANIM.avatar.updateMatrixWorld(true);
+  }
+}
+function applyIdlePose(){
+  Object.keys(RESOLVED_BONE_MAP).forEach(function(k){
+    var bn=RESOLVED_BONE_MAP[k];
+    if(!bn) return;
+    var b=ANIM.avatarBones[bn];
+    var target=IDLE_LOCAL_QUAT[bn]||REST_LOCAL_QUAT[bn];
+    if(b&&target) b.quaternion.copy(target);
+  });
+  ['Left','Right'].forEach(function(s){
+    Object.keys(RESOLVED_FINGER_MAP[s]).forEach(function(f){
+      RESOLVED_FINGER_MAP[s][f].forEach(function(bn){
+        if(!bn) return;
+        var b=ANIM.avatarBones[bn];
+        if(b&&REST_LOCAL_QUAT[bn]) b.quaternion.copy(REST_LOCAL_QUAT[bn]);
+      });
+    });
+  });
+}
+
+/** Full two-axis orientation: rotates the bone's rest (fwd, up) basis onto the target
+ *  (fwd, up) basis. Unlike a direction aim it also fixes ROLL, so palm rotation is controlled. */
+function basisMat(f,u){
+  var fwd=f.clone(); if(fwd.lengthSq()<1e-8) return null; fwd.normalize();
+  var up=u.clone().addScaledVector(fwd,-u.dot(fwd)); if(up.lengthSq()<1e-8) return null; up.normalize();
+  var side=new THREE.Vector3().crossVectors(up,fwd).normalize();
+  return new THREE.Matrix4().makeBasis(side,up,fwd);
+}
+function orientBoneTwoAxis(bn,fwd,up,restFwd,restUp,lerp){
+  var bone=ANIM.avatarBones[bn]; if(!bone) return false;
+  var rwq=REST_WORLD_QUAT[bn]; if(!rwq) return false;
+  var tb=basisMat(fwd,up), rb=basisMat(restFwd,restUp); if(!tb||!rb) return false;
+  var R=new THREE.Matrix4().multiplyMatrices(tb, rb.clone().invert());
+  var qR=new THREE.Quaternion().setFromRotationMatrix(R);
+  var twq=qR.multiply(rwq.clone());                 // target world orientation
+  var pwq=new THREE.Quaternion(); if(bone.parent) bone.parent.getWorldQuaternion(pwq);
+  bone.quaternion.slerp(pwq.invert().multiply(twq), lerp!=null?lerp:0.5);
+  return true;
+}
+
+function applyWristRotation(hand,wristPt,bn,side){
+  if(!hand||!wristPt||!bn) return;
+  var mv=handOffsetVec(hand,9), iv=handOffsetVec(hand,5), pv=handOffsetVec(hand,17);
+  if(!mv||!iv||!pv) return;
+  var fwd=mv.clone(); if(fwd.lengthSq()<1e-6) return; fwd.normalize();
+  // Full orientation: pointing direction (fwd) + palm normal (cross(index, pinky), same convention as rest)
+  if(ANIM.wristFullOrient!==false && REST_PALM_DIR[side] && REST_WORLD_DIR[bn]){
+    var palmN=new THREE.Vector3().crossVectors(iv,pv);
+    if(palmN.lengthSq()>1e-8){
+      palmN.normalize(); if(ANIM.palmFlip) palmN.negate();
+      if(orientBoneTwoAxis(bn,fwd,palmN,REST_WORLD_DIR[bn],REST_PALM_DIR[side],0.5)) return;
+    }
+  }
+  // Direction-based wrist aim (soft): direction plus a slight palm tilt
+  var lat=side==='Left'?iv.clone().sub(pv):pv.clone().sub(iv); lat.normalize();
+  var up=new THREE.Vector3().crossVectors(fwd,lat).normalize(); if(up.lengthSq()<1e-6){ rotateBoneToWorldDir(bn,fwd,0.55); return; }
+  rotateBoneToWorldDir(bn,fwd.clone().addScaledVector(up,0.12).normalize(),0.55);
+
+  // ── Targeted palm-direction correction ──
+  // Hand Z is flat, so a direction aim leaves palm roll free and inward-facing palms
+  // (e.g. "bardak") can appear to face outwards. Align the palm normal (cross(index, pinky))
+  // by rolling around the forward axis, but only when both normals are clearly
+  // perpendicular to it; when ambiguous, leave the bone alone so motion is not disturbed.
+  if(ANIM.palmRoll && REST_PALM_DIR[side] && REST_WORLD_QUAT[bn]){
+    var bone=ANIM.avatarBones[bn]; if(!bone) return;
+    var bwq=new THREE.Quaternion(); bone.getWorldQuaternion(bwq);
+    var delta=bwq.clone().multiply(REST_WORLD_QUAT[bn].clone().invert());
+    var curP=REST_PALM_DIR[side].clone().applyQuaternion(delta);            // current avatar palm normal (world)
+    var tgtP=new THREE.Vector3().crossVectors(iv,pv);                       // target palm normal from landmarks
+    if(tgtP.lengthSq()>1e-9){
+      tgtP.normalize(); if(ANIM.palmRollSign<0) tgtP.negate();
+      var cp=curP.clone().addScaledVector(fwd,-curP.dot(fwd));              // components perpendicular to forward
+      var tp=tgtP.clone().addScaledVector(fwd,-tgtP.dot(fwd));
+      if(cp.lengthSq()>0.05 && tp.lengthSq()>0.05){                         // both clearly in-plane: reliable
+        cp.normalize(); tp.normalize();
+        var ang=Math.acos(Math.max(-1,Math.min(1,cp.dot(tp))));
+        if(new THREE.Vector3().crossVectors(cp,tp).dot(fwd)<0) ang=-ang;
+        ang=Math.max(-1.5,Math.min(1.5,ang));                              // limit large rolls
+        var rollQ=new THREE.Quaternion().setFromAxisAngle(fwd.clone().normalize(),ang);
+        var pwq=new THREE.Quaternion(); if(bone.parent) bone.parent.getWorldQuaternion(pwq);
+        bone.quaternion.slerp(pwq.invert().multiply(rollQ.multiply(bwq)),0.4);
+      }
+    }
+  }
+}
+
+function applyForearmTwist(hand,elbowPt,wristPt,fn,side){
+  if(ANIM.forearmTwist===false) return;
+  if(!hand||!elbowPt||!wristPt||!fn) return;
+  var bone=ANIM.avatarBones[fn]; if(!bone) return;
+  var rwd=REST_WORLD_DIR[fn],rwq=REST_WORLD_QUAT[fn]; if(!rwd||!rwq) return;
+  var sc=0.3;
+  function hw(i){ var v=handOffsetVec(hand,i); return v?wristPt.clone().add(v.multiplyScalar(sc)):null; }
+  var w=hw(0),idx=hw(5),pk=hw(17); if(!w||!idx||!pk) return;
+  var foreDir=new THREE.Vector3().subVectors(wristPt,elbowPt); if(foreDir.lengthSq()<1e-6) return; foreDir.normalize();
+  var ti=new THREE.Vector3().subVectors(idx,w).normalize(),tp=new THREE.Vector3().subVectors(pk,w).normalize();
+  var pn=new THREE.Vector3().crossVectors(ti,tp).normalize();
+  if(side==='Right') pn.negate();
+  var tc=pn.clone().addScaledVector(foreDir,-pn.dot(foreDir)).normalize();
+  if(tc.lengthSq()<1e-6) return;
+  var td=foreDir.clone().addScaledVector(tc,0.35).normalize();
+  var tq=new THREE.Quaternion().setFromUnitVectors(foreDir,td);
+  var cwq=new THREE.Quaternion(); bone.getWorldQuaternion(cwq);
+  var twq=tq.multiply(cwq);
+  var pwq=new THREE.Quaternion(); if(bone.parent) bone.parent.getWorldQuaternion(pwq);
+  bone.quaternion.slerp(pwq.clone().invert().multiply(twq),0.18);
+}
+
+/** Finger retargeting: aims each phalanx along its landmark segment so the fingers move
+ *  with the data, plus a light cosmetic curl on top. */
+function applyFingerRetarget(hand,wristPt,side){
+  if(!hand) return;
+  var bases={Thumb:1,Index:5,Middle:9,Ring:13,Pinky:17};
+  var curlDeg = (ANIM.fingerCurl!=null?ANIM.fingerCurl:16);
+  // Finger segment depth weight; lower values let x and y dominate
+  var fdg = (ANIM.fingerDepthGain!=null?ANIM.fingerDepthGain:1.2);
+  var lat=null;
+  var i5=handOffsetVec(hand,5,fdg), p17=handOffsetVec(hand,17,fdg), m9=handOffsetVec(hand,9,fdg);
+  if(curlDeg && i5&&p17&&m9){
+    var fwd=m9.clone(); if(fwd.lengthSq()>1e-8){ fwd.normalize();
+      lat = side==='Left'? i5.clone().sub(p17) : p17.clone().sub(i5);
+      lat.addScaledVector(fwd,-lat.dot(fwd));
+      if(lat.lengthSq()>1e-8) lat.normalize(); else lat=null;
+    }
+  }
+  var sign = (ANIM.fingerCurlSign||1);
+  Object.keys(bases).forEach(function(f){
+    var bones=RESOLVED_FINGER_MAP[side][f]||[];
+    var base=bases[f];
+    for(var s=0;s<3;s++){
+      var bn=bones[s]; if(!bn) continue;
+      var a=handOffsetVec(hand,base+s,fdg), b=handOffsetVec(hand,base+s+1,fdg);
+      if(!a||!b) continue;
+      var dir=new THREE.Vector3().subVectors(b,a);     // landmark segment direction = actual finger motion
+      if(dir.lengthSq()<1e-9) continue;
+      if(lat&&curlDeg){                                 // optional cosmetic curl
+        var ang=(curlDeg*(s+1))*Math.PI/180*sign*(f==='Thumb'?0.35:1);
+        dir.applyAxisAngle(lat,ang);
+      }
+      rotateBoneToWorldDir(bn,dir,0.85);
+    }
+  });
+}
+
+function computeVelocity(fd,prev){
+  if(!prev) return 0;
+  var total=0,count=0;
+  ['11','12','13','14','15','16'].forEach(function(k){
+    var a=(fd.pose||{})[k],b=(prev.pose||{})[k];
+    if(a&&b){ var dx=a[0]-b[0],dy=a[1]-b[1],dz=a[2]-b[2]; total+=Math.sqrt(dx*dx+dy*dy+dz*dz); count++; }
+  });
+  return count>0?total/count:0;
+}
+
+function applyAvatarFrame(fd){
+  if(!ANIM.avatarLoaded||!ANIM.avatar) return;
+  if(Object.keys(REST_WORLD_DIR).length===0) return;
+  var pose=fd.pose||{}, lh=fd.left_hand, rh=fd.right_hand;
+  var lS=lmVec(pose,11),rS=lmVec(pose,12),lE=lmVec(pose,13),rE=lmVec(pose,14);
+  var lW=lmVec(pose,15),rW=lmVec(pose,16),lH=lmVec(pose,23),rH=lmVec(pose,24);
+  var nose=lmVec(pose,0);
+  // Left/right source swap (mirrored presentation): together with mirrorX keeps the
+  // arms on the correct side instead of crossing the body.
+  if(ANIM.swapLR){ var _t; _t=lS;lS=rS;rS=_t; _t=lE;lE=rE;rE=_t; _t=lW;lW=rW;rW=_t; _t=lH;lH=rH;rH=_t; _t=lh;lh=rh;rh=_t; }
+  if(!lS||!rS) return;
+  var vel=computeVelocity(fd,PREV_AVATAR_FRAME);
+  var vb=Math.min(vel*5,0.3);
+  resetDrivenBones();
+  ANIM.avatar.updateMatrixWorld(true);
+  var sm=new THREE.Vector3().addVectors(lS,rS).multiplyScalar(0.5);
+  if(lH&&rH){
+    var hm=new THREE.Vector3().addVectors(lH,rH).multiplyScalar(0.5);
+    var su=new THREE.Vector3().subVectors(sm,hm).normalize();
+    // Hips and Spine stay fixed and upright to avoid whole-body sway from noisy hip
+    // landmarks; only the upper torso (Spine1/Spine2) follows the shoulder-hip axis slightly.
+    rotateBoneToWorldDir(RESOLVED_BONE_MAP.Spine1,su,0.16+vb*0.25);
+    rotateBoneToWorldDir(RESOLVED_BONE_MAP.Spine2,su,0.24+vb*0.40);
+  }
+  if(nose){ var nd=new THREE.Vector3().subVectors(nose,sm).normalize(); rotateBoneToWorldDir(RESOLVED_BONE_MAP.Neck,nd,0.14); rotateBoneToWorldDir(RESOLVED_BONE_MAP.Head,nd,0.12); }
+  // Clavicles follow the upper arm slightly
+  if(lE) aimBone(RESOLVED_BONE_MAP.LShoulder,lS,lE,0.45);
+  if(rE) aimBone(RESOLVED_BONE_MAP.RShoulder,rS,rE,0.45);
+  // Arms: position-preserving two-bone IK with a torso-anchored anisotropic mapping:
+  //   horizontal scale = avatar shoulder width / source shoulder width
+  //   vertical scale   = avatar (shoulder→head) / source (shoulder→nose), so hands reach head height
+  var ikMap=null;
+  if(ANIM.useIK){
+    var saL=boneWorldPos(RESOLVED_BONE_MAP.LUpperArm), saR=boneWorldPos(RESOLVED_BONE_MAP.RUpperArm);
+    var headW=boneWorldPos(RESOLVED_BONE_MAP.Head)||boneWorldPos(RESOLVED_BONE_MAP.Neck);
+    var wSrc=lS.distanceTo(rS);
+    if(saL&&saR&&wSrc>1e-6){
+      var avShMid=saL.clone().add(saR).multiplyScalar(0.5);
+      var srcShMid=lS.clone().add(rS).multiplyScalar(0.5);
+      var sx=avShMid.distanceTo(saL)*2/wSrc; // avatar shoulder width / source shoulder width
+      // Depth (Z) has its own gain: MediaPipe pose Z is noisy and exaggerated, and scaling it
+      // by sx pushed the hands far in front of the body. armDepthGain tones it down.
+      var sy=sx, sz=sx*(ANIM.armDepthGain!=null?ANIM.armDepthGain:0.45);
+      // Vertical reference: the avatar's face/nose height. Using the top of the head moved
+      // face-level signs above the head; source nose → avatar nose maps them correctly.
+      var avTopY;
+      if(headW && ANIM.headTopY!=null) avTopY = headW.y + 0.42*(ANIM.headTopY - headW.y); // ~nose height
+      else if(ANIM.headTopY!=null) avTopY = ANIM.headTopY;
+      else avTopY = headW? headW.y : avShMid.y+0.3;
+      if(nose){
+        var srcV=nose.y-srcShMid.y, avV=avTopY-avShMid.y;
+        if(Math.abs(srcV)>1e-4){ sy=avV/srcV; sy=Math.max(0.6*sx,Math.min(2.8*sx,sy)); }
+      }
+      ikMap={ o:srcShMid, O:avShMid, sx:sx, sy:sy, sz:sz };
+    }
+  }
+  var okL=false, okR=false;
+  if(ikMap){
+    if(lW) okL=applyArmIK('Left', lE,lW, ikMap, 0.85,0.90, lS);
+    if(rW) okR=applyArmIK('Right',rE,rW, ikMap, 0.85,0.90, rS);
+  }
+  // Fallback when IK is off or fails: direction-based FK
+  if(!okL){ if(lS&&lE) aimBone(RESOLVED_BONE_MAP.LUpperArm,lS,lE,0.88); if(lE&&lW) aimBone(RESOLVED_BONE_MAP.LForeArm,lE,lW,0.90); }
+  if(!okR){ if(rS&&rE) aimBone(RESOLVED_BONE_MAP.RUpperArm,rS,rE,0.88); if(rE&&rW) aimBone(RESOLVED_BONE_MAP.RForeArm,rE,rW,0.90); }
+  if(lh&&lW){ if(lE) applyForearmTwist(lh,lE,lW,RESOLVED_BONE_MAP.LForeArm,'Left'); applyWristRotation(lh,lW,RESOLVED_BONE_MAP.LHand,'Left'); applyFingerRetarget(lh,lW,'Left'); }
+  if(rh&&rW){ if(rE) applyForearmTwist(rh,rE,rW,RESOLVED_BONE_MAP.RForeArm,'Right'); applyWristRotation(rh,rW,RESOLVED_BONE_MAP.RHand,'Right'); applyFingerRetarget(rh,rW,'Right'); }
+  ANIM.avatar.updateMatrixWorld(true);
+  PREV_AVATAR_FRAME=fd;
+}
+
+/* ═══════════════════════════════════════════════
+   ANIMATION LOOP
+═══════════════════════════════════════════════ */
+function lerpA(a,b,t){ if(!a||!b) return a||b; return [a[0]*(1-t)+b[0]*t,a[1]*(1-t)+b[1]*t,a[2]*(1-t)+b[2]*t]; }
+function lerpFrame(fa,fb,t){
+  if(!fa) return fb; if(!fb) return fa;
+  var r={pose:{},left_hand:null,right_hand:null};
+  var keys={}; Object.keys(fa.pose||{}).forEach(function(k){keys[k]=1;}); Object.keys(fb.pose||{}).forEach(function(k){keys[k]=1;});
+  Object.keys(keys).forEach(function(k){ r.pose[k]=lerpA((fa.pose||{})[k],(fb.pose||{})[k],t)||((fa.pose||{})[k])||((fb.pose||{})[k]); });
+  if(fa.left_hand&&fb.left_hand) r.left_hand=fa.left_hand.map(function(p,i){return lerpA(p,fb.left_hand[i],t);}); else r.left_hand=fa.left_hand||fb.left_hand;
+  if(fa.right_hand&&fb.right_hand) r.right_hand=fa.right_hand.map(function(p,i){return lerpA(p,fb.right_hand[i],t);}); else r.right_hand=fa.right_hand||fb.right_hand;
+  return r;
+}
+
+/* ── Motion quality: cubic interpolation, smoothstep, EMA smoothing ── */
+
+/** Smoothstep: transitions start and end at zero velocity (no abrupt start or stop) */
+function easeInOut(t){ t=Math.max(0,Math.min(1,t)); return t*t*(3-2*t); }
+
+/** Catmull-Rom cubic interpolation: C1-continuous across 4 keyframes (no velocity jumps at keyframes, unlike linear) */
+function catmull(p0,p1,p2,p3,t){
+  var t2=t*t, t3=t2*t;
+  return 0.5*((2*p1)+(-p0+p2)*t+(2*p0-5*p1+4*p2-p3)*t2+(-p0+3*p1-3*p2+p3)*t3);
+}
+function cubicA(a0,a1,a2,a3,t){
+  if(!a1||!a2) return a1||a2||a0||a3||null;
+  var b0=a0||a1, b3=a3||a2;
+  return [catmull(b0[0],a1[0],a2[0],b3[0],t),
+          catmull(b0[1],a1[1],a2[1],b3[1],t),
+          catmull(b0[2],a1[2],a2[2],b3[2],t)];
+}
+function cubicFrame(f0,f1,f2,f3,t){
+  if(!f1) return f2; if(!f2) return f1;
+  var r={pose:{},left_hand:null,right_hand:null};
+  var keys={}; Object.keys(f1.pose||{}).forEach(function(k){keys[k]=1;}); Object.keys(f2.pose||{}).forEach(function(k){keys[k]=1;});
+  Object.keys(keys).forEach(function(k){
+    r.pose[k]=cubicA((f0&&f0.pose)?f0.pose[k]:null,(f1.pose||{})[k],(f2.pose||{})[k],(f3&&f3.pose)?f3.pose[k]:null,t)||((f1.pose||{})[k])||((f2.pose||{})[k]);
+  });
+  if(f1.left_hand&&f2.left_hand) r.left_hand=f1.left_hand.map(function(p,i){return cubicA(f0&&f0.left_hand?f0.left_hand[i]:null,p,f2.left_hand[i],f3&&f3.left_hand?f3.left_hand[i]:null,t);}); else r.left_hand=f1.left_hand||f2.left_hand;
+  if(f1.right_hand&&f2.right_hand) r.right_hand=f1.right_hand.map(function(p,i){return cubicA(f0&&f0.right_hand?f0.right_hand[i]:null,p,f2.right_hand[i],f3&&f3.right_hand?f3.right_hand[i]:null,t);}); else r.right_hand=f1.right_hand||f2.right_hand;
+  return r;
+}
+
+/** EMA temporal smoothing with a per-joint speed limit:
+ *  - suppresses high-frequency jitter in the source landmarks (low-pass);
+ *  - smoothMaxStep clips physically impossible jumps within one frame (spike guard). */
+var SMOOTH_FRAME=null;
+function resetSmoothing(){ SMOOTH_FRAME=null; }
+function emaVec(prev,cur,alpha,maxStep){
+  if(!prev) return cur?cur.slice():null;
+  if(!cur) return prev.slice();
+  var out=[0,0,0];
+  for(var i=0;i<3;i++){
+    var d=cur[i]-prev[i];
+    if(maxStep>0 && Math.abs(d)>maxStep) d=(d<0?-maxStep:maxStep); // speed / spike limit
+    out[i]=prev[i]+d*alpha;
+  }
+  return out;
+}
+function smoothFrame(fd){
+  var a=ANIM.smoothAlpha, ms=ANIM.smoothMaxStep;
+  if(a>=1) return fd; // smoothing off
+  if(!SMOOTH_FRAME) SMOOTH_FRAME={pose:{},left_hand:null,right_hand:null};
+  var out={pose:{},left_hand:null,right_hand:null};
+  Object.keys(fd.pose||{}).forEach(function(k){
+    var sm=emaVec(SMOOTH_FRAME.pose[k],fd.pose[k],a,ms);
+    out.pose[k]=sm; SMOOTH_FRAME.pose[k]=sm;
+  });
+  if(fd.left_hand){ out.left_hand=fd.left_hand.map(function(p,i){return emaVec(SMOOTH_FRAME.left_hand?SMOOTH_FRAME.left_hand[i]:null,p,a,ms);}); SMOOTH_FRAME.left_hand=out.left_hand; } else { out.left_hand=null; SMOOTH_FRAME.left_hand=null; }
+  if(fd.right_hand){ out.right_hand=fd.right_hand.map(function(p,i){return emaVec(SMOOTH_FRAME.right_hand?SMOOTH_FRAME.right_hand[i]:null,p,a,ms);}); SMOOTH_FRAME.right_hand=out.right_hand; } else { out.right_hand=null; SMOOTH_FRAME.right_hand=null; }
+  return out;
+}
+
+function animLoop(){
+  requestAnimationFrame(animLoop);
+  var delta=Math.min(ANIM.clock.getDelta(),ANIM.maxDelta); // avoid a huge jump when the tab returns from the background
+  if(ANIM.controls) ANIM.controls.update();
+  if(ANIM.returningToRest&&ANIM.avatarLoaded&&ANIM.avatar&&Object.keys(REST_WORLD_DIR).length>0){
+    updateRestBlend(delta);
+  } else if(ANIM.playing&&ANIM.queue.length>0){
+    ANIM.frameTimer+=delta;
+    var fd1=1/(ANIM.FPS*(ANIM.speed||1)*(ANIM.userSpeed||1)); // slower speed → longer frame duration
+    var item=ANIM.queue[ANIM.queueIdx],frames=item.frames,total=frames.length;
+    var isLast=ANIM.queueIdx===ANIM.queue.length-1;
+    // Update the caption only when the word changes
+    if(ANIM._capIdx!==ANIM.queueIdx){ ANIM._capIdx=ANIM.queueIdx; setCaption(item.disp||item.word,true); }
+    var subT=Math.min(ANIM.frameTimer/fd1,1.0);
+    var i=ANIM.frameIdx;
+    // Cubic (Catmull-Rom) keyframe interpolation over the 4 neighbouring frames, clamped at the edges
+    var p1=frames[i];
+    var p2=(i+1<total)?frames[i+1]:(!isLast?ANIM.queue[ANIM.queueIdx+1].frames[0]:frames[i]);
+    var p0=(i-1>=0)?frames[i-1]:p1;
+    var p3=(i+2<total)?frames[i+2]:p2;
+    var fd=cubicFrame(p0,p1,p2,p3,subT);
+    // Cross-fade into the next word over the last TRANSITION_FRAMES with smoothstep
+    var left=total-ANIM.frameIdx;
+    if(!isLast&&left<=ANIM.TRANSITION_FRAMES){
+      var tr=easeInOut(1-(left/ANIM.TRANSITION_FRAMES));
+      fd=lerpFrame(fd,ANIM.queue[ANIM.queueIdx+1].frames[0],tr);
+    }
+    applyAvatarFrame(smoothFrame(fd));
+    var totalF=ANIM.queue.reduce(function(s,r){return s+r.frames.length;},0);
+    var doneF=ANIM.queue.slice(0,ANIM.queueIdx).reduce(function(s,r){return s+r.frames.length;},0);
+    document.getElementById('pbFill').style.width=((doneF+ANIM.frameIdx+subT)/totalF*100)+'%';
+    document.getElementById('frameCounter').textContent=(doneF+ANIM.frameIdx)+'/'+totalF;
+    if(ANIM.frameTimer>=fd1){
+      ANIM.frameTimer-=fd1; ANIM.frameIdx++;
+      if(ANIM.frameIdx>=total){
+        if(!isLast){ANIM.queueIdx++;ANIM.frameIdx=0;}
+        else if(ANIM.loop){
+          // Loop: start over without returning to rest
+          ANIM.queueIdx=0; ANIM.frameIdx=0; ANIM.frameTimer=0; ANIM._capIdx=-1;
+          PREV_AVATAR_FRAME=null;
+          resetSmoothing();
+        }
+        else{
+          ANIM.frameIdx=0;
+          ANIM.frameTimer=0;
+          ANIM.playing=false;
+          setAnimStatus('Tamamlandı','playing');
+          setCaption(null,false);
+          PREV_AVATAR_FRAME=null;
+          resetSmoothing();
+          captureRestBlendStart();
+          ANIM.restBlendT=0;
+          ANIM.returningToRest=true;
+        }
+      }
+    }
+  }
+  if(ANIM.renderer) ANIM.renderer.render(ANIM.scene,ANIM.camera);
+}
+
+/* ═══════════════════════════════════════════════
+   PLAYBACK CONTROLS
+═══════════════════════════════════════════════ */
+/** Trim the resting frames (arms down) at the start and end of a clip so consecutive words
+ *  flow without the hands dropping between them. Uses wrist HEIGHT: start/end frames close
+ *  to the clip's lowest point are rest frames. Clips whose hands stay low throughout (small
+ *  height range) are left untouched. A small margin is kept. */
+function trimRestPadding(frames){
+  if(!frames||frames.length<8) return frames;
+  function wristY(i){ // smaller y = higher (pose y points down); the higher of the two wrists
+    var p=frames[i].pose||{}, ys=[];
+    if(p['15']) ys.push(p['15'][1]); if(p['16']) ys.push(p['16'][1]);
+    return ys.length? Math.min.apply(null,ys) : 1;
+  }
+  var ys=frames.map(function(_,i){ return wristY(i); });
+  var restY=Math.max.apply(null,ys), actY=Math.min.apply(null,ys), range=restY-actY;
+  if(range<0.06) return frames;        // hands stay at the same height: low sign, no trimming
+  var thr=restY - 0.16*range;          // start/end frames below this (larger y) are rest
+  var s=0, e=frames.length-1;
+  while(s<e-4 && ys[s+1]>thr) s++;
+  while(e>s+4 && ys[e]>thr) e--;
+  s=Math.max(0,s-2); e=Math.min(frames.length-1,e+2); // keep a 2-frame margin so motion does not start abruptly
+  return (e-s+1)<frames.length ? frames.slice(s,e+1) : frames;
+}
+
+/** Play one or more words. `display` is an optional caption (Turkish spelling of the word). */
+async function playSentence(text, display){
+  if(!ANIM.initialized) return;
+  var words=text.trim().toLowerCase().replace(/[,;]/g,' ').split(/\s+/).filter(function(w){return w.length>0;});
+  if(!words.length) return;
+  setAnimStatus('Yükleniyor...','');
+  document.getElementById('playBtn').disabled=true;
+  var results=await Promise.all(words.map(async function(word){
+    try{ var res=await fetch('/landmark/'+encodeURIComponent(word)); if(!res.ok) return {word:word,frames:null}; var d=await res.json(); var fr=trimRestPadding(d.frames); return {word:word,disp:((words.length===1&&display)||d.word_tr||word),frames:fr}; }
+    catch(e){ return {word:word,frames:null}; }
+  }));
+  ANIM.queue=results.filter(function(r){return r.frames&&r.frames.length>0;});
+  if(!ANIM.queue.length){ setAnimStatus('Bulunamadı: '+words.join(', '),'error'); document.getElementById('playBtn').disabled=false; return; }
+  ANIM.returningToRest=false;
+  ANIM.restBlendStartQuats=null;
+  ANIM.restBlendT=0;
+  resetSmoothing();
+  ANIM.queueIdx=0; ANIM.frameIdx=0; ANIM.frameTimer=0; ANIM.playing=true; ANIM._capIdx=-1;
+  document.getElementById('playPauseBtn').textContent='⏸';
+  document.getElementById('vpStatus').textContent='Oynatılıyor: '+ANIM.queue.map(function(r){return r.disp||r.word;}).join(' › ');
+  setAnimStatus('Oynatılıyor: '+ANIM.queue.map(function(r){return r.disp||r.word;}).join(' › '),'playing');
+  document.getElementById('playBtn').disabled=false;
+  // Highlight the active word
+  document.querySelectorAll('.word-chip').forEach(function(c){ c.classList.toggle('active', c.dataset.word===words[0]); });
+}
+function playCurrentInput(){ var t=document.getElementById('wordInput').value.trim(); if(t) playSentence(t); }
+function togglePlay(){ ANIM.playing=!ANIM.playing; document.getElementById('playPauseBtn').textContent=ANIM.playing?'⏸':'▶'; }
+function restartAnim(){
+  ANIM.returningToRest=false;
+  ANIM.restBlendStartQuats=null;
+  ANIM.restBlendT=0;
+  resetSmoothing();
+  ANIM.queueIdx=0;ANIM.frameIdx=0;ANIM.frameTimer=0;ANIM.playing=true;ANIM._capIdx=-1;
+  document.getElementById('playPauseBtn').textContent='⏸';
+}
+function setAnimStatus(t,c){ var el=document.getElementById('animStatus'); el.textContent=t; el.className='anim-status'+(c?' '+c:''); }
+
+/* ── Presentation controls: caption, slow motion, loop ── */
+function setCaption(text,show){
+  var el=document.getElementById('wordCaption');
+  if(!el) return;
+  if(text!=null) el.textContent=text;
+  el.classList.toggle('show', !!show);
+}
+function toggleSlow(){
+  ANIM.slowOn=!ANIM.slowOn;
+  ANIM.speed=ANIM.slowOn?0.6:0.9;
+  document.getElementById('vpSlowBtn').classList.toggle('active', ANIM.slowOn);
+}
+function toggleLoop(){
+  ANIM.loop=!ANIM.loop;
+  document.getElementById('vpLoopBtn').classList.toggle('active', ANIM.loop);
+}
+function setUserSpeed(value){
+  var v=Number(value);
+  if(isFinite(v)&&v>0) ANIM.userSpeed=Math.max(0.25,Math.min(3,v));
+}
+
+/* ═══════════════════════════════════════════════
+   SEARCH + WORD LIST
+═══════════════════════════════════════════════ */
+function onSearchInput(){
+  var q=document.getElementById('wordInput').value,last=q.trim().toLowerCase().split(/\s+/).pop();
+  var sb=document.getElementById('suggestions');
+  document.getElementById('playBtn').disabled=q.trim().length===0;
+  if(last.length<1){sb.style.display='none';return;}
+  var m=ANIM.wordList.filter(function(w){return w.startsWith(last);}).slice(0,8);
+  if(!m.length){sb.style.display='none';return;}
+  sb.innerHTML=m.map(function(w){return '<div class="suggestion-item" onclick="selectWord(\''+w+'\')">'+w+'</div>';}).join('');
+  sb.style.display='block';
+}
+function onSearchKey(e){
+  if(e.key==='Enter'){document.getElementById('suggestions').style.display='none';playCurrentInput();}
+  if(e.key==='Escape') document.getElementById('suggestions').style.display='none';
+}
+function selectWord(w, display){
+  document.getElementById('wordInput').value=w;
+  document.getElementById('suggestions').style.display='none';
+  document.getElementById('playBtn').disabled=false;
+  playSentence(w, display);
+}
+function buildWordGrid(words){
+  document.getElementById('wordGrid').innerHTML=words.map(function(w){
+    return '<div class="word-chip" data-word="'+w+'" onclick="selectWord(\''+w+'\')" title="'+w+'">'+w+'</div>';
+  }).join('');
+}
+document.addEventListener('click',function(e){ if(!e.target.closest('.search-wrap')) document.getElementById('suggestions').style.display='none'; });
+
+/* ═══════════════════════════════════════════════
+   POSTMESSAGE (parent page → this iframe)
+═══════════════════════════════════════════════ */
+window.addEventListener('message',function(event){
+  if(event.origin!==window.location.origin) return;
+  var data=event.data;
+  if(!data) return;
+  if(data.type==='play_sign'&&data.word) selectWord(String(data.word).trim(), data.label?String(data.label):null);
+  if(data.type==='set_speed') setUserSpeed(data.value);
+});
+
+/* ═══════════════════════════════════════════════
+   START
+═══════════════════════════════════════════════ */
+(function(){
+  initAnim();
+  loadAvatar('/frontend/avatar.glb', false);
+})();
+</script>
+</body>
+</html>

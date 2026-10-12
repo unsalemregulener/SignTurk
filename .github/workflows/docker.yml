@@ -1,0 +1,45 @@
+name: Docker
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**"]
+  pull_request:
+    paths-ignore: ["**.md", "docs/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    name: Build and start the image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: docker build -t signturk:ci .
+      - name: Start
+        run: docker run -d --name signturk -p 8000:8000 signturk:ci
+      - name: Wait until the model is loaded
+        run: |
+          for attempt in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:8000/api/health -o health.json; then
+              if python3 -c "import json, sys; h = json.load(open('health.json')); sys.exit(0 if h['model_226']['ready'] else 1)"; then
+                cat health.json
+                exit 0
+              fi
+            fi
+            sleep 5
+          done
+          echo "The container did not become ready in 10 minutes"
+          cat health.json || true
+          exit 1
+      - name: Live sockets through uvicorn
+        run: |
+          docker cp tests/socket_check.py signturk:/tmp/socket_check.py
+          docker cp docs/videos/cay.mp4 signturk:/tmp/cay.mp4
+          docker exec signturk python /tmp/socket_check.py --video /tmp/cay.mp4
+      - name: Container logs
+        if: always()
+        run: docker logs signturk

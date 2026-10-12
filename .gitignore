@@ -1,0 +1,33 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.ipynb_checkpoints/
+
+# Runtime state
+local_dev.db
+local_dev.db-*
+uploads/
+*.log
+
+# Downloaded model weights (see model-assets.json)
+*.keras
+*.onnx
+*.part
+
+# Editors and operating systems
+.vscode/
+.idea/
+.vs/
+.DS_Store
+Thumbs.db
+desktop.ini
