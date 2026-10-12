@@ -1,0 +1,46 @@
+# ── Core Framework ───────────────────────────────────────
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+python-multipart==0.0.20
+websockets==15.0.1
+
+# ── ML / CV ───────────────────────────────────────────────
+tensorflow==2.18.0
+keras==3.13.2             # the bundled model files were saved with Keras 3.13.2
+mediapipe==0.10.21
+numpy<2.0
+opencv-python-headless==4.11.0.86
+
+# ── Database ──────────────────────────────────────────────
+sqlalchemy==2.0.40
+psycopg[binary]==3.2.9
+
+# ── Auth / Validation ─────────────────────────────────────
+passlib==1.7.4
+pydantic[email]==2.11.1
+
+# ── Config / Secrets ──────────────────────────────────────
+# Loads HF_TOKEN (and any other secrets) from a local .env file so they
+# don't have to be exported every session. The .env file is gitignored.
+python-dotenv==1.0.1
+
+# ── Text processing (sentence engine + grammar) ───────────
+# The deterministic rule-based path needs nothing beyond the stdlib and
+# FastAPI/pydantic above. The optional ML grammar layer (Qwen2.5-7B-Instruct
+# via the HF Inference API) needs huggingface_hub and is enabled with
+# SIGNAI_USE_ML_GRAMMAR=1 plus a valid HF_TOKEN. Without a token it falls
+# back to the rule-based engine.
+huggingface_hub==1.21.0
+#
+# Optional local ML models (off by default; only needed to run model weights
+# locally instead of through the HF Inference API). Keep these at or above
+# the listed versions; older releases have published CVEs.
+# transformers>=4.48.0
+# torch>=2.6.0
+# sentencepiece>=0.2.1
+# accelerate>=1.1.1
+# protobuf>=4.25.3,<5
+#
+# Optional server-side text-to-speech for /api/text/* (the web interface
+# speaks through the browser's speech synthesis instead):
+# gTTS==2.5.4

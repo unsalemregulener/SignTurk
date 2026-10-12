@@ -1,0 +1,13 @@
+* text=auto eol=lf
+
+*.keras binary
+*.glb binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.mp4 binary
+
+landmarks/*.json linguist-generated=true
+frontend/three.min.js linguist-vendored=true
+frontend/GLTFLoader.js linguist-vendored=true
+frontend/OrbitControls.js linguist-vendored=true
