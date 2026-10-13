@@ -133,7 +133,8 @@ pip install -r requirements-gpu.txt
 
 `/api/health` then shows `"device": "cuda"` under `model_226`. If CUDA cannot
 be loaded, the server logs why and stays on the CPU. Installing
-`requirements.txt` again brings the CPU build back.
+`requirements.txt` again, or a new rtmlib (it depends on `onnxruntime`),
+brings the CPU build back; run the two commands again after that.
 
 ## Configuration
 
