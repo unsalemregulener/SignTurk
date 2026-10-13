@@ -44,7 +44,7 @@ class Live226:
         self.frame_count = int(self.config["frame_count"])
         self.enabled = os.environ.get("SIGNTURK_ENABLE_226", "1").strip().lower() not in {"0", "false", "no"}
         # Run the person detector on every Nth frame and reuse its box in between.
-        self.detect_every = max(1, int(os.environ.get("SIGNTURK_226_DETECT_EVERY", "1")))
+        self.detect_every = max(1, int(os.environ.get("SIGNTURK_226_DETECT_EVERY", "4")))
         self.state = "idle" if self.enabled else "disabled"   # idle, loading, ready, missing, error, disabled
         self.message = "" if self.enabled else "SIGNTURK_ENABLE_226=0 ile kapatıldı"
         self.device = None

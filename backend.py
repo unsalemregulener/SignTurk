@@ -1021,7 +1021,9 @@ async def live226_predict(websocket: WebSocket):
                 frame = decode_base64_image(payload["image"])
                 if frame is None:
                     continue
-                reuse = boxes if len(clip) % LIVE226.detect_every else None
+                # Detect on every Nth frame, and on every frame while nobody has been found
+                found = boxes is not None and len(boxes) > 0
+                reuse = boxes if found and len(clip) % LIVE226.detect_every else None
                 landmarks, boxes = await asyncio.to_thread(LIVE226.landmarks, prepare_frame(frame), reuse)
                 clip.append(landmarks)
                 await websocket.send_json({"type": "progress", "processed": len(clip)})

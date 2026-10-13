@@ -54,9 +54,10 @@ to the 16 frames the model was trained on.
 1. The user presses **İşareti kaydet**. After a 3-2-1 countdown the browser
    captures 32 unmirrored frames at about 12 fps (2.7 seconds) and streams
    them to the server as it records.
-2. For each frame the server runs a YOLOX person detector and RTMW whole-body
-   pose estimation. Of the 133 keypoints it keeps 17 body points and 21 points
-   per hand: 75 landmarks with the signer's own left and right.
+2. For each frame the server runs RTMW whole-body pose estimation inside the
+   person box of a YOLOX detector, which runs on every fourth frame. Of the 133
+   keypoints it keeps 17 body points and 21 points per hand: 75 landmarks with
+   the signer's own left and right.
 3. When the clip is complete the landmarks are centred between the shoulders,
    scaled by the shoulder width and turned into joint, bone, motion, geometry
    and hand features.
@@ -132,7 +133,7 @@ Settings are read from the environment or from a `.env` file
 | `SIGNTURK_ADMIN_NAME` | `SignTurk Admin` | display name of that account |
 | `SIGNTURK_TOKEN_HOURS` | `12` | how long a sign-in stays valid |
 | `SIGNTURK_ENABLE_226` | `1` | `0` skips loading the full mode |
-| `SIGNTURK_226_DETECT_EVERY` | `1` | run the person detector on every Nth frame of a clip and reuse its box in between |
+| `SIGNTURK_226_DETECT_EVERY` | `4` | run the person detector on every Nth frame of a clip and reuse its box in between |
 | `HF_TOKEN`, `SIGNAI_*` | off | optional ML layer for the sentence engine, see [`text_processing`](text_processing/README.md) |
 
 There are no built-in accounts. Without the admin variables the application
@@ -204,8 +205,7 @@ builds and starts the Docker image.
 
 - SignTurk recognises isolated signs, one at a time.
 - The full mode is heavier than the fast mode. A GPU keeps it responsive
-  (install onnxruntime-gpu instead of onnxruntime); on a CPU,
-  `SIGNTURK_226_DETECT_EVERY` lightens it.
+  (install onnxruntime-gpu instead of onnxruntime).
 - The sentence engine is rule-based and covers common sentence patterns.
 - `tools/extract_landmarks.py` regenerates the avatar files from the AUTSL
   training videos.
