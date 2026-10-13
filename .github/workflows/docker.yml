@@ -3,9 +3,9 @@ name: Docker
 on:
   push:
     branches: [main]
-    paths-ignore: ["**.md", "docs/**", "tests/**"]
+    paths-ignore: ["**.md", "docs/**"]
   pull_request:
-    paths-ignore: ["**.md", "docs/**", "tests/**"]
+    paths-ignore: ["**.md", "docs/**"]
   workflow_dispatch:
 
 permissions:
@@ -35,6 +35,11 @@ jobs:
           echo "The container did not become ready in 10 minutes"
           cat health.json || true
           exit 1
+      - name: Live sockets through uvicorn
+        run: |
+          docker cp tests/socket_check.py signturk:/tmp/socket_check.py
+          docker cp docs/videos/cay.mp4 signturk:/tmp/cay.mp4
+          docker exec signturk python /tmp/socket_check.py --video /tmp/cay.mp4
       - name: Container logs
         if: always()
         run: docker logs signturk
