@@ -8,7 +8,7 @@ websockets==15.0.1
 tensorflow==2.18.0
 keras==3.13.2             # the model files were saved with Keras 3.13.2
 mediapipe==0.10.21
-numpy<2.0
+numpy<3.0
 # mediapipe and rtmlib each require a full OpenCV build; keep both on one version
 opencv-python==4.11.0.86
 opencv-contrib-python==4.11.0.86
