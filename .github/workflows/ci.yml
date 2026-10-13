@@ -23,7 +23,8 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install
-        run: pip install "numpy<2.0" ruff==0.14.2
+        # Ruff at the version in requirements-dev.txt, so its updates reach this job
+        run: pip install "numpy<2.0" "$(grep -E '^ruff==' requirements-dev.txt | cut -d' ' -f1)"
       - name: Lint
         run: ruff check .
       - name: Compile
