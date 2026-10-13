@@ -94,9 +94,10 @@ class Live226:
             return
         self.state = "loading"
         self.message = "Model yükleniyor"
-        threading.Thread(target=self._load, name="live226-load", daemon=True).start()
+        threading.Thread(target=self.load, name="live226-load", daemon=True).start()
 
-    def _load(self) -> None:
+    def load(self) -> None:
+        """Load the ensemble and RTMW; `start_loading` runs this in the background."""
         started = time.time()
         try:
             from signturk_runtime.ensemble import Ensemble
