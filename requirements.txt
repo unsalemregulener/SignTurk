@@ -18,7 +18,7 @@ onnxruntime==1.30.0       # runs the RTMW pose and YOLOX person models
 rtmlib==0.0.15
 
 # ── Database ──────────────────────────────────────────────
-sqlalchemy==2.0.40
+sqlalchemy==2.1.4
 psycopg[binary]==3.2.9
 
 # ── Auth / Validation ─────────────────────────────────────
