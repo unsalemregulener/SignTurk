@@ -15,7 +15,7 @@ opencv-contrib-python==4.11.0.86
 
 # ── 226-class mode ────────────────────────────────────────
 onnxruntime==1.30.0       # runs the RTMW pose and YOLOX person models
-rtmlib==0.0.15
+rtmlib==0.0.16
 
 # ── Database ──────────────────────────────────────────────
 sqlalchemy==2.1.4
