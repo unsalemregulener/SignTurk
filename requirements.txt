@@ -2,7 +2,7 @@
 fastapi==0.143.0
 uvicorn[standard]==0.54.0
 python-multipart==0.0.32
-websockets==15.0.1
+websockets==17.2
 
 # ── ML / CV ───────────────────────────────────────────────
 tensorflow==2.18.0
