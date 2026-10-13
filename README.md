@@ -120,6 +120,20 @@ docker compose up --build
 The compose file keeps the SQLite database in the `signturk-data` volume
 unless `.env` sets `DATABASE_URL`.
 
+### GPU
+
+The full mode runs YOLOX and RTMW through ONNX Runtime. With an NVIDIA GPU,
+replace the CPU build with the CUDA one; pip brings CUDA and cuDNN along:
+
+```bash
+pip uninstall -y onnxruntime
+pip install -r requirements-gpu.txt
+```
+
+`/api/health` then shows `"device": "cuda"` under `model_226`. If CUDA cannot
+be loaded, the server logs why and stays on the CPU. Installing
+`requirements.txt` again brings the CPU build back.
+
 ## Configuration
 
 Settings are read from the environment or from a `.env` file
@@ -134,6 +148,7 @@ Settings are read from the environment or from a `.env` file
 | `SIGNTURK_TOKEN_HOURS` | `12` | how long a sign-in stays valid |
 | `SIGNTURK_ENABLE_226` | `1` | `0` skips loading the full mode |
 | `SIGNTURK_226_DETECT_EVERY` | `4` | run the person detector on every Nth frame of a clip and reuse its box in between |
+| `SIGNTURK_226_DEVICE` | `auto` | `cuda` or `cpu` for the full mode; `auto` uses CUDA when ONNX Runtime has it |
 | `HF_TOKEN`, `SIGNAI_*` | off | optional ML layer for the sentence engine, see [`text_processing`](text_processing/README.md) |
 
 There are no built-in accounts. Without the admin variables the application
@@ -204,8 +219,8 @@ builds and starts the Docker image.
 ## Scope
 
 - SignTurk recognises isolated signs, one at a time.
-- The full mode is heavier than the fast mode. A GPU keeps it responsive
-  (install onnxruntime-gpu instead of onnxruntime).
+- The full mode is heavier than the fast mode; a [GPU](#gpu) keeps it
+  responsive.
 - The sentence engine is rule-based and covers common sentence patterns.
 - `tools/extract_landmarks.py` regenerates the avatar files from the AUTSL
   training videos.

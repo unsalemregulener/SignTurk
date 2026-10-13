@@ -1,0 +1,5 @@
+# NVIDIA GPU for the 226-class mode: the CUDA build of ONNX Runtime, with CUDA 13
+# and cuDNN 9 installed through pip. It replaces the CPU build from requirements.txt:
+#   pip uninstall -y onnxruntime
+#   pip install -r requirements-gpu.txt
+onnxruntime-gpu[cuda,cudnn]==1.30.0

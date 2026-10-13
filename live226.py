@@ -106,6 +106,7 @@ class Live226:
             ensemble.load()
             ensemble.warm_up()
             extractor = Extractor(self.config)
+            extractor(np.zeros((480, 640, 3), dtype=np.uint8))   # the first run on a GPU is slow
             self.ensemble, self.extractor, self.device = ensemble, extractor, extractor.device
             self.state, self.message = "ready", ""
             logger.info("[226] ready on %s in %.1fs", self.device, time.time() - started)
