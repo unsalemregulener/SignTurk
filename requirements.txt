@@ -23,7 +23,7 @@ psycopg[binary]==3.2.9
 
 # ── Auth / Validation ─────────────────────────────────────
 passlib==1.7.4
-pydantic[email]==2.11.1
+pydantic[email]==2.14.0
 
 # ── Config / Secrets ──────────────────────────────────────
 # Loads HF_TOKEN (and any other secrets) from a local .env file so they
