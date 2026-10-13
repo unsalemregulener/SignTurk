@@ -36,7 +36,7 @@ python-dotenv==1.0.1
 # via the HF Inference API) needs huggingface_hub and is enabled with
 # SIGNAI_USE_ML_GRAMMAR=1 plus a valid HF_TOKEN. Without a token it falls
 # back to the rule-based engine.
-huggingface_hub==1.21.0
+huggingface_hub==1.33.0
 #
 # Optional local ML models (off by default; only needed to run model weights
 # locally instead of through the HF Inference API). Keep these at or above
