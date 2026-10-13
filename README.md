@@ -76,16 +76,17 @@ engine rebuilds the sentence from all approved words.
 | | Fast mode | Full mode |
 | --- | --- | --- |
 | Vocabulary | 179 of the 226 signs in [AUTSL](#data) | all 226 signs |
-| Landmarks | MediaPipe Hands, 2 × 21 points | RTMW-x-l whole body, 17 body + 2 × 21 hand points |
+| Landmarks | MediaPipe Hands, 2 × 21 points | RTMW-x-l whole body (256×192), 17 body + 2 × 21 hand points |
 | Model input | 16 frames × 156 features | 32 frames; joint, bone, motion, geometry and hand streams |
 | Architecture | 2 × bidirectional LSTM (256 units) → additive temporal attention → dense 512 → dense 256 | four recurrent streams, weighted average ([model card](research/model_226/MODEL_CARD.md)) |
-| Accuracy | 85.65% top-1, 93.96% top-3 on the AUTSL validation split (3,512 samples) | 94.17% top-1, 98.88% top-3 on the AUTSL test split (3,742 samples) |
+| Accuracy | 85.65% top-1, 93.96% top-3 on the AUTSL validation split (3,512 samples) | 94.39% top-1, 98.64% top-3 on the AUTSL test split (3,742 samples) |
 | Download | 63 MB | about 660 MB, including the RTMW and YOLOX ONNX models |
 
 The fast model covers the 179 signs that were recognised most reliably during
-development. Both accuracy figures are offline results on AUTSL; the
-[model card](research/model_226/MODEL_CARD.md) describes the full model in
-more detail.
+development. Both accuracy figures are offline results on AUTSL. The full-mode
+figure was measured with `tools/evaluate_226.py`, which runs the test videos
+through the server's code; the [model card](research/model_226/MODEL_CARD.md)
+has the details.
 
 Weights are published in the
 [`model-assets-v1`](https://github.com/unsalemregulener/SignTurk/releases/tag/model-assets-v1)
@@ -197,7 +198,7 @@ text_processing/       Turkish sentence engine
 frontend/              interface (React from a CDN), avatar page, three.js r128, avatar.glb
 landmarks/             226 landmark sequences for the avatar
 demo_assets_179/       fast mode metadata; the weights are downloaded
-tools/                 download_models.py, extract_landmarks.py (avatar files from AUTSL)
+tools/                 download_models.py, extract_landmarks.py (avatar files from AUTSL), evaluate_226.py
 tests/                 unit tests and the end-to-end check (backend_smoke.py)
 ```
 
@@ -215,6 +216,13 @@ real models, MediaPipe and RTMW: it plays the avatar's landmark recordings
 and a webcam clip through the fast mode, and the same clip through the
 full-mode socket. It also checks that every weight URL is reachable, and
 builds and starts the Docker image.
+
+`tools/evaluate_226.py` measures the full mode on AUTSL videos, which are not
+included. The test split takes about 75 minutes on an RTX 5070 Ti:
+
+```bash
+python tools/evaluate_226.py --videos AUTSL/test --labels AUTSL/test/ground_truth.csv
+```
 
 ## Scope
 

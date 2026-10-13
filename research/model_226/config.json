@@ -9,10 +9,10 @@
   },
   "thresholds": {"top1": 0.70, "margin": 0.12},
   "extractor": {
-    "detector": "models/rtmw_hf/yolox_m.onnx",
+    "detector": "models/rtmw/yolox_m_humanart.onnx",
     "detector_input_size": [640, 640],
-    "pose": "models/rtmw_hf/rtmw-dw-x-l_simcc-cocktail14.onnx",
-    "pose_input_size": [288, 384],
+    "pose": "models/rtmw/rtmw-dw-x-l_simcc-cocktail14_256x192.onnx",
+    "pose_input_size": [192, 256],
     "keypoint_threshold": 0.05
   }
 }

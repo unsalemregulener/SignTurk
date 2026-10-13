@@ -24,8 +24,8 @@ These files are published as release assets and downloaded by
 | Files | Origin | Terms |
 | --- | --- | --- |
 | `live-179.keras`, `226-*.keras` | trained by the project team on AUTSL | see [AUTSL](#autsl) |
-| `rtmw-dw-x-l_simcc-cocktail14.onnx` | RTMW from OpenMMLab MMPose, copied from the Hugging Face mirror [Izymka/rtmw-dw-x-l_simcc-cocktail14](https://huggingface.co/Izymka/rtmw-dw-x-l_simcc-cocktail14) | Apache-2.0 |
-| `yolox_m.onnx` | YOLOX-m from Megvii, copied from the Hugging Face mirror [memescreamer/yolox-onnx](https://huggingface.co/memescreamer/yolox-onnx) | Apache-2.0 |
+| `rtmw-dw-x-l_simcc-cocktail14_256x192.onnx` | RTMW-x-l (256×192) from OpenMMLab MMPose: `end2end.onnx` from [rtmw-dw-x-l_simcc-cocktail14_270e-256x192_20231122.zip](https://download.openmmlab.com/mmpose/v1/projects/rtmw/onnx_sdk/rtmw-dw-x-l_simcc-cocktail14_270e-256x192_20231122.zip) | Apache-2.0 |
+| `yolox_m_humanart.onnx` | YOLOX-m person detector trained on Human-Art, from OpenMMLab MMPose: `end2end.onnx` from [yolox_m_8xb8-300e_humanart-c2c7a14a.zip](https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/yolox_m_8xb8-300e_humanart-c2c7a14a.zip) | Apache-2.0 |
 
 ## AUTSL
 
