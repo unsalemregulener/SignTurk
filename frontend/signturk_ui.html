@@ -3,586 +3,262 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SIGNTURK</title>
+  <title>SignTurk</title>
   <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/@babel/standalone@7.29.9/babel.min.js" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/lucide@1.21.0/dist/umd/lucide.min.js" crossorigin="anonymous"></script>
   <style>
     :root{
-      --bg:#f5f7fb;
+      --bg:#f5f6f8;
       --surface:#ffffff;
-      --surface-2:#f9fbff;
-      --line:#dce3ee;
-      --line-strong:#c7d2e1;
-      --ink:#101828;
-      --muted:#667085;
-      --soft:#eef3f8;
-      --brand:#0b4f6c;
-      --brand-2:#127c89;
-      --teal:#16a394;
-      --green:#16a34a;
-      --amber:#d97706;
-      --red:#dc2626;
-      --blue:#2563eb;
-      --panel:#0b1220;
-      --panel-2:#111827;
-      --shadow:0 18px 45px rgba(15,23,42,.10);
-      --radius:8px;
-      --sidebar:276px;
+      --surface-2:#f0f2f5;
+      --line:#e2e6ec;
+      --line-2:#cfd6df;
+      --ink:#0f172a;
+      --ink-2:#334155;
+      --muted:#64748b;
+      --brand:#0f766e;
+      --brand-strong:#0b5e57;
+      --brand-soft:#e3f3f1;
+      --good:#15803d;
+      --good-soft:#e7f6ec;
+      --warn:#b45309;
+      --warn-soft:#fdf2e1;
+      --bad:#b91c1c;
+      --bad-soft:#fdeaea;
+      --stage:#0b1220;
+      --radius-sm:8px;
+      --radius:12px;
+      --radius-lg:16px;
+      --shadow-sm:0 1px 2px rgba(15,23,42,.06);
+      --shadow:0 6px 24px rgba(15,23,42,.08);
+      --font:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
     }
     *{box-sizing:border-box}
-    html,body,#root{height:100%}
-    body{
-      margin:0;
-      font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color:var(--ink);
-      background:
-        linear-gradient(180deg, rgba(11,79,108,.06), transparent 260px),
-        var(--bg);
-      letter-spacing:0;
-    }
-    button,input,select,textarea{font:inherit}
-    button{border:0;cursor:pointer}
-    button:disabled{cursor:not-allowed;opacity:.6}
-    a{color:inherit;text-decoration:none}
-    .mono{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
-    .app{
-      min-height:100%;
-      display:grid;
-      grid-template-columns:var(--sidebar) minmax(0,1fr);
-    }
-    .sidebar{
-      min-height:100vh;
-      background:#08111f;
-      color:#d7e0ea;
-      border-right:1px solid rgba(255,255,255,.08);
-      display:flex;
-      flex-direction:column;
-      position:sticky;
-      top:0;
-      z-index:20;
-    }
-    .brand{
-      height:84px;
-      display:flex;
-      align-items:center;
-      gap:12px;
-      padding:0 22px;
-      border-bottom:1px solid rgba(255,255,255,.08);
-    }
-    .brand-mark{
-      width:42px;height:42px;
-      border-radius:8px;
-      display:grid;place-items:center;
-      color:#fff;
-      font-weight:900;
-      background:linear-gradient(135deg,var(--brand),var(--teal));
-      box-shadow:0 10px 24px rgba(22,163,148,.22);
-    }
-    .brand h1{margin:0;font-size:20px;letter-spacing:.06em}
-    .brand p{margin:2px 0 0;color:#93a4b8;font-size:12px}
-    .nav{
-      padding:16px 12px;
-      display:flex;
-      flex-direction:column;
-      gap:5px;
-    }
-    .nav-label{
-      padding:15px 12px 7px;
-      color:#8192a7;
-      font-size:11px;
-      font-weight:800;
-      text-transform:uppercase;
-      letter-spacing:.08em;
-    }
-    .nav button{
-      width:100%;
-      min-height:42px;
-      border-radius:8px;
-      display:flex;
-      align-items:center;
-      gap:10px;
-      padding:0 12px;
-      color:#c8d3df;
-      background:transparent;
-      text-align:left;
-    }
-    .nav button:hover{background:rgba(255,255,255,.06);color:#fff}
-    .nav button.active{
-      background:rgba(22,163,148,.16);
-      color:#fff;
-      box-shadow:inset 3px 0 0 var(--teal);
-    }
-    .sidebar-footer{
-      margin-top:auto;
-      padding:14px 16px 18px;
-      border-top:1px solid rgba(255,255,255,.08);
-      display:flex;
-      align-items:center;
-      gap:10px;
-    }
-    .avatar{
-      width:38px;height:38px;
-      border-radius:8px;
-      background:#13233a;
-      color:#fff;
-      display:grid;place-items:center;
-      font-weight:800;
-      flex:0 0 auto;
-    }
-    .user-meta{min-width:0;flex:1}
-    .user-meta strong{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .user-meta span{display:block;font-size:12px;color:#8da0b4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .icon-btn{
-      width:38px;height:38px;
-      border-radius:8px;
-      display:grid;place-items:center;
-      background:var(--soft);
-      color:var(--ink);
-      border:1px solid var(--line);
-    }
-    .icon-btn:hover{border-color:var(--line-strong);background:#fff}
-    .main{min-width:0;display:flex;flex-direction:column}
-    .topbar{
-      min-height:84px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:14px;
-      padding:18px 28px;
-      background:rgba(245,247,251,.82);
-      backdrop-filter:blur(16px);
-      border-bottom:1px solid var(--line);
-      position:sticky;
-      top:0;
-      z-index:15;
-    }
-    .mobile-menu{display:none}
-    .page-title h2{margin:0;font-size:23px;line-height:1.15}
-    .page-title p{margin:4px 0 0;color:var(--muted);font-size:13px}
-    .top-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-    .chip{
-      min-height:32px;
-      display:inline-flex;
-      align-items:center;
-      gap:7px;
-      padding:0 10px;
-      border-radius:999px;
-      border:1px solid var(--line);
-      background:var(--surface);
-      color:var(--muted);
-      font-size:12px;
-      font-weight:700;
-      white-space:nowrap;
-    }
-    .chip.ok{border-color:rgba(22,163,74,.22);color:#15803d;background:#eefdf4}
-    .chip.warn{border-color:rgba(217,119,6,.25);color:#b45309;background:#fff8eb}
-    .chip.bad{border-color:rgba(220,38,38,.22);color:#b91c1c;background:#fff1f2}
-    .content{width:min(1480px,100%);margin:0 auto;padding:24px 28px 34px}
-    .grid{display:grid;gap:16px}
-    .grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
-    .grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
-    .grid.cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}
-    .panel{
-      background:var(--surface);
-      border:1px solid var(--line);
-      border-radius:8px;
-      box-shadow:0 1px 2px rgba(16,24,40,.03);
-    }
-    .panel-head{
-      min-height:58px;
-      padding:14px 16px;
-      border-bottom:1px solid var(--line);
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-    }
-    .panel-head h3{margin:0;font-size:15px}
-    .panel-head span{color:var(--muted);font-size:12px}
-    .panel-body{padding:16px}
-    .metric{
-      padding:16px;
-      display:flex;
-      justify-content:space-between;
-      gap:12px;
-      min-height:112px;
-    }
-    .metric .value{font-size:30px;font-weight:850;line-height:1;margin-top:10px}
-    .metric .label{color:var(--muted);font-size:13px;font-weight:700}
-    .metric .sub{color:var(--muted);font-size:12px;margin-top:8px}
-    .metric-icon{
-      width:42px;height:42px;border-radius:8px;
-      display:grid;place-items:center;
-      background:#e9f7f5;color:var(--brand-2);
-      flex:0 0 auto;
-    }
-    .btn{
-      min-height:40px;
-      border-radius:8px;
-      padding:0 14px;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      gap:8px;
-      font-weight:800;
-      color:var(--ink);
-      background:#fff;
-      border:1px solid var(--line);
-      white-space:nowrap;
-    }
-    .btn:hover{border-color:var(--line-strong)}
+    html,body,#root{min-height:100%}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+    button,input,select{font:inherit;color:inherit}
+    button{cursor:pointer}
+    a{color:var(--brand)}
+    .mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.86em}
+    .muted{color:var(--muted)}
+    .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+    /* ── Buttons ── */
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:0 16px;border-radius:10px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink);font-weight:600;font-size:14px;white-space:nowrap;transition:background .15s,border-color .15s,box-shadow .15s,transform .05s}
+    .btn:hover{background:var(--surface-2)}
+    .btn:active{transform:translateY(1px)}
+    .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+    .btn:focus-visible,.icon-btn:focus-visible,.seg button:focus-visible,.card-button:focus-visible{outline:3px solid rgba(15,118,110,.35);outline-offset:2px}
     .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
-    .btn.primary:hover{background:#083f59}
-    .btn.green{background:var(--green);border-color:var(--green);color:#fff}
-    .btn.red{background:var(--red);border-color:var(--red);color:#fff}
-    .btn.ghost{background:transparent}
-    .btn.small{min-height:34px;padding:0 11px;font-size:12px}
-    .field{display:flex;flex-direction:column;gap:7px}
-    .field label{font-size:12px;font-weight:800;color:#344054}
-    .input,.select{
-      width:100%;
-      min-height:42px;
-      border-radius:8px;
-      border:1px solid var(--line);
-      background:#fff;
-      color:var(--ink);
-      padding:0 12px;
-      outline:none;
-    }
-    .input:focus,.select:focus{border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(18,124,137,.12)}
-    .table-wrap{overflow:auto}
-    table{width:100%;border-collapse:collapse;min-width:620px}
-    th,td{padding:12px 14px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
-    th{color:#475467;background:var(--surface-2);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
-    td{color:#1f2937}
+    .btn.primary:hover{background:var(--brand-strong)}
+    .btn.good{background:var(--good);border-color:var(--good);color:#fff}
+    .btn.good:hover{filter:brightness(.95)}
+    .btn.bad{background:var(--surface);border-color:#f0c9c9;color:var(--bad)}
+    .btn.bad:hover{background:var(--bad-soft)}
+    .btn.ghost{background:transparent;border-color:transparent}
+    .btn.ghost:hover{background:var(--surface-2)}
+    .btn.lg{min-height:48px;padding:0 22px;font-size:15px;border-radius:12px}
+    .btn.sm{min-height:32px;padding:0 10px;font-size:13px;border-radius:8px}
+    .btn.block{width:100%}
+    .icon-btn{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:10px;border:1px solid transparent;background:transparent;color:var(--ink-2)}
+    .icon-btn:hover{background:var(--surface-2)}
+    .kbd{display:inline-block;min-width:20px;padding:1px 6px;border-radius:6px;border:1px solid rgba(255,255,255,.4);font-size:11px;font-weight:700;opacity:.85}
+    .btn:not(.primary):not(.good) .kbd{border-color:var(--line-2);color:var(--muted)}
+
+    /* ── Pills, cards, fields ── */
+    .pill{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 10px;border-radius:999px;font-size:12.5px;font-weight:650;background:var(--surface-2);color:var(--ink-2);white-space:nowrap}
+    .pill.good{background:var(--good-soft);color:var(--good)}
+    .pill.warn{background:var(--warn-soft);color:var(--warn)}
+    .pill.bad{background:var(--bad-soft);color:var(--bad)}
+    .pill.brand{background:var(--brand-soft);color:var(--brand)}
+    .dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
+    .dot.pulse{animation:pulse 1.2s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+    .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm)}
+    .card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px 0}
+    .card-head h2,.card-head h3{margin:0;font-size:16px;font-weight:700}
+    .card-head p{margin:2px 0 0;color:var(--muted);font-size:13px}
+    .card-body{padding:16px 20px 20px}
+    .field{display:grid;gap:6px}
+    .field label{font-size:13px;font-weight:650;color:var(--ink-2)}
+    .input,.select{width:100%;min-height:42px;padding:0 12px;border:1px solid var(--line-2);border-radius:10px;background:var(--surface);outline:none;transition:border-color .15s,box-shadow .15s}
+    .input:focus,.select:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(15,118,110,.15)}
+    .note{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:12px;font-size:14px;background:var(--surface-2);color:var(--ink-2)}
+    .note.warn{background:var(--warn-soft);color:#7c3d06}
+    .note.bad{background:var(--bad-soft);color:#7f1d1d}
+    .note.good{background:var(--good-soft);color:#14532d}
+    .note svg{flex:none;margin-top:1px}
+    .empty{padding:28px 16px;text-align:center;color:var(--muted);font-size:14px}
+    .seg{display:inline-flex;gap:2px;padding:3px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line)}
+    .seg button{min-height:32px;padding:0 14px;border:0;border-radius:9px;background:transparent;font-weight:650;font-size:13.5px;color:var(--ink-2);display:inline-flex;align-items:center;gap:6px}
+    .seg button.active{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(15,23,42,.12)}
+    .seg button:disabled{opacity:.45;cursor:not-allowed}
+    .toggle{position:relative;width:44px;height:26px;border-radius:999px;border:0;background:var(--line-2);transition:background .15s;flex:none}
+    .toggle span{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .15s}
+    .toggle.on{background:var(--brand)}
+    .toggle.on span{transform:translateX(18px)}
+    input[type=range]{width:100%;accent-color:var(--brand)}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th{text-align:left;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;padding:10px 20px;border-bottom:1px solid var(--line)}
+    td{padding:12px 20px;border-bottom:1px solid var(--line)}
     tr:last-child td{border-bottom:0}
-    .empty{
-      padding:34px 18px;
-      color:var(--muted);
-      text-align:center;
-      font-size:13px;
-    }
-    .auth-page{
-      min-height:100%;
-      display:grid;
-      place-items:center;
-      padding:24px;
-      background:
-        linear-gradient(140deg, rgba(11,79,108,.15), transparent 42%),
-        linear-gradient(320deg, rgba(22,163,148,.16), transparent 45%),
-        var(--bg);
-    }
-    .auth-shell{
-      width:min(1060px,100%);
-      display:grid;
-      grid-template-columns:1fr 410px;
-      background:#fff;
-      border:1px solid var(--line);
-      border-radius:8px;
-      overflow:hidden;
-      box-shadow:var(--shadow);
-    }
-    .auth-brand{
-      background:#08111f;
-      color:#fff;
-      padding:42px;
-      display:flex;
-      flex-direction:column;
-      justify-content:space-between;
-      min-height:560px;
-    }
-    .auth-brand h1{margin:18px 0 8px;font-size:42px;letter-spacing:.06em}
-    .auth-brand p{margin:0;color:#b7c5d8;max-width:460px;line-height:1.6}
-    .auth-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:34px}
-    .auth-stat{border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:14px;background:rgba(255,255,255,.04)}
-    .auth-stat strong{display:block;font-size:24px}
-    .auth-stat span{display:block;font-size:12px;color:#a9b9ce;margin-top:6px}
-    .auth-form{padding:34px;display:flex;flex-direction:column;justify-content:center}
-    .auth-form h2{margin:0 0 6px;font-size:25px}
-    .auth-form p{margin:0 0 22px;color:var(--muted);font-size:13px}
-    .auth-actions{display:flex;gap:8px;margin-top:16px}
-    .alert{
-      border-radius:8px;
-      padding:11px 12px;
-      font-size:13px;
-      margin-bottom:14px;
-      border:1px solid var(--line);
-    }
-    .alert.bad{background:#fff1f2;color:#b91c1c;border-color:#fecdd3}
-    .alert.ok{background:#eefdf4;color:#15803d;border-color:#bbf7d0}
-    .live-layout{
-      display:grid;
-      grid-template-columns:minmax(0,1.45fr) minmax(360px,.8fr);
-      gap:16px;
-      align-items:start;
-    }
-    .camera-panel{
-      background:var(--panel);
-      border:1px solid #182235;
-      border-radius:8px;
-      overflow:hidden;
-      box-shadow:var(--shadow);
-    }
-    .camera-top{
-      min-height:54px;
-      padding:10px 14px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      border-bottom:1px solid rgba(255,255,255,.08);
-      color:#e5edf6;
-    }
-    .camera-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-    .dark-chip{
-      min-height:30px;
-      display:inline-flex;
-      align-items:center;
-      gap:7px;
-      padding:0 10px;
-      border-radius:999px;
-      background:#111b2c;
-      border:1px solid #27344a;
-      color:#c9d6e5;
-      font-size:12px;
-      font-weight:800;
-      white-space:nowrap;
-    }
-    .dark-chip.ok{color:#a7f3d0;border-color:#14532d;background:#0f2a24}
-    .dark-chip.warn{color:#fde68a;border-color:#854d0e;background:#2c2211}
-    .video-wrap{
-      position:relative;
-      aspect-ratio:16/10;
-      background:
-        linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px),
-        #070d18;
-      background-size:34px 34px;
-      overflow:hidden;
-    }
-    video{
-      width:100%;
-      height:100%;
-      object-fit:cover;
-      display:block;
-      background:#050914;
-    }
-    video.mirror{transform:scaleX(-1)}
-    .camera-empty{
-      position:absolute;
-      inset:0;
-      display:grid;
-      place-items:center;
-      color:#c2cfdd;
-      text-align:center;
-      padding:18px;
-    }
-    .camera-empty h3{margin:10px 0 3px;font-size:18px;color:#fff}
-    .camera-empty p{margin:0;color:#8fa1b8;font-size:13px}
-    .scan-line{
-      position:absolute;
-      left:0;right:0;
-      height:2px;
-      background:linear-gradient(90deg, transparent, var(--teal), transparent);
-      opacity:.85;
-      animation:scan 2.4s linear infinite;
-      display:none;
-    }
-    .camera-panel.running .scan-line{display:block}
-    @keyframes scan{0%{top:8%}100%{top:92%}}
-    .camera-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-    .mode-switch{display:inline-flex;gap:3px;padding:3px;border-radius:999px;background:#111b2c;border:1px solid #27344a}
-    .mode-switch button{min-height:26px;padding:0 11px;border-radius:999px;background:transparent;color:#c9d6e5;font-size:12px;font-weight:800}
-    .mode-switch button.active{background:var(--teal);color:#04121a}
-    .mode-switch button:disabled:not(.active){opacity:.45;cursor:not-allowed}
-    .countdown{position:absolute;inset:0;display:grid;place-items:center;font-size:96px;font-weight:900;color:#fff;text-shadow:0 4px 28px rgba(0,0,0,.6);pointer-events:none}
-    .alert.warn{background:#fff8eb;color:#b45309;border-color:#fde68a}
-    button.top-row{width:100%;text-align:left;font:inherit;color:inherit}
-    button.top-row:hover{border-color:var(--teal)}
-    .camera-controls{
-      min-height:66px;
-      padding:12px 14px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      border-top:1px solid rgba(255,255,255,.08);
-      flex-wrap:wrap;
-    }
-    .control-left,.control-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-    .result-panel .panel-body{display:flex;flex-direction:column;gap:14px}
-    .prediction{
-      min-height:168px;
-      border-radius:8px;
-      padding:18px;
-      background:linear-gradient(135deg,#f8fbff,#eef9f7);
-      border:1px solid var(--line);
-      display:flex;
-      flex-direction:column;
-      justify-content:space-between;
-    }
-    .prediction-label{
-      font-size:38px;
-      line-height:1.05;
-      font-weight:900;
-      word-break:break-word;
-    }
-    .prediction-sub{color:var(--muted);font-size:13px;margin-top:8px}
-    .confidence-row{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      margin-top:16px;
-    }
-    .bar{
-      height:10px;
-      flex:1;
-      background:#e8edf3;
-      border-radius:999px;
-      overflow:hidden;
-    }
-    .bar span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--brand),var(--teal));width:0}
-    .top-list{display:flex;flex-direction:column;gap:8px}
-    .top-row{
-      display:grid;
-      grid-template-columns:32px minmax(0,1fr) 54px;
-      gap:9px;
-      align-items:center;
-      padding:10px;
-      border:1px solid var(--line);
-      border-radius:8px;
-      background:#fff;
-    }
-    .rank{
-      width:28px;height:28px;border-radius:8px;
-      display:grid;place-items:center;
-      background:#edf8f7;
-      color:var(--brand-2);
-      font-weight:900;
-      font-size:12px;
-    }
-    .top-row strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
-    .top-row span{display:block;color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .transcript{
-      display:flex;
-      flex-direction:column;
-      gap:8px;
-      max-height:230px;
-      overflow:auto;
-    }
-    .transcript-item{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:8px;
-      padding:10px 12px;
-      border:1px solid var(--line);
-      border-radius:8px;
-      background:#fff;
-    }
-    .toggle{
-      width:48px;height:28px;border-radius:999px;padding:3px;
-      background:#d7dee8;
-      display:flex;
-      align-items:center;
-      transition:.18s ease;
-      border:1px solid transparent;
-    }
-    .toggle span{
-      width:20px;height:20px;border-radius:50%;
-      background:#fff;
-      box-shadow:0 1px 4px rgba(0,0,0,.2);
-      transform:translateX(0);
-      transition:.18s ease;
-    }
-    .toggle.on{background:var(--brand-2)}
-    .toggle.on span{transform:translateX(20px)}
-    .settings-row{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:14px;
-      padding:13px 0;
-      border-bottom:1px solid var(--line);
-    }
+    .table-wrap{overflow-x:auto}
+    .spinner{width:18px;height:18px;border-radius:50%;border:2.5px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite;display:inline-block}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* ── App shell ── */
+    .topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:20px;height:64px;padding:0 24px;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;letter-spacing:-.01em;color:var(--ink);text-decoration:none;background:none;border:0;padding:0}
+    .brand-mark{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--brand);color:#fff;font-size:13px;font-weight:800;letter-spacing:.02em}
+    .nav{display:flex;gap:4px;margin-left:8px}
+    .nav button{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 12px;border-radius:10px;border:0;background:transparent;color:var(--ink-2);font-weight:600;font-size:14px}
+    .nav button:hover{background:var(--surface-2)}
+    .nav button.active{background:var(--brand-soft);color:var(--brand)}
+    .top-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+    .user-btn{display:flex;align-items:center;gap:8px;height:40px;padding:0 6px 0 6px;border-radius:12px;border:1px solid transparent;background:transparent}
+    .user-btn:hover{background:var(--surface-2)}
+    .avatar-circle{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:#fff;font-size:12px;font-weight:700}
+    .menu{position:absolute;right:0;top:calc(100% + 8px);min-width:230px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;z-index:40}
+    .menu-head{padding:10px 12px;border-bottom:1px solid var(--line);margin-bottom:6px}
+    .menu-head strong{display:block;font-size:14px}
+    .menu-head span{font-size:12.5px;color:var(--muted)}
+    .menu button{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border:0;border-radius:9px;background:transparent;font-size:14px;font-weight:550;text-align:left}
+    .menu button:hover{background:var(--surface-2)}
+    .page{max-width:1280px;margin:0 auto;padding:28px 24px 48px}
+    .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+    .page-head h1{margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em}
+    .page-head p{margin:4px 0 0;color:var(--muted)}
+    .grid{display:grid;gap:16px}
+    .cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .mobile-only{display:none}
+
+    /* ── Live page ── */
+    .live{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:20px;align-items:start}
+    .live-main{display:grid;gap:14px;min-width:0}
+    .stage-card{padding:14px}
+    .stage-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+    .stage{position:relative;width:100%;aspect-ratio:16/10;background:var(--stage);border-radius:12px;overflow:hidden}
+    .stage.off{min-height:320px}
+    .stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;display:block}
+    .stage video.mirror{transform:scaleX(-1)}
+    .stage .guide{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+    .stage-status{position:absolute;left:12px;top:12px;display:flex;gap:8px;flex-wrap:wrap;z-index:3}
+    .stage-status .pill{background:rgba(11,18,32,.72);color:#fff;backdrop-filter:blur(8px)}
+    .stage-status .pill.good{background:rgba(21,128,61,.85);color:#fff}
+    .stage-status .pill.warn{background:rgba(180,83,9,.88);color:#fff}
+    .stage-off{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:#cbd5e1;padding:24px;z-index:2}
+    .stage-off h3{margin:12px 0 6px;color:#fff;font-size:20px}
+    .stage-off p{margin:0 auto 18px;max-width:420px;font-size:14px;color:#94a3b8}
+    .countdown{position:absolute;inset:0;display:grid;place-items:center;font-size:120px;font-weight:800;color:#fff;text-shadow:0 6px 30px rgba(0,0,0,.5);z-index:4;pointer-events:none}
+    .rec-bar{position:absolute;left:0;right:0;bottom:0;height:6px;background:rgba(255,255,255,.15);z-index:3}
+    .rec-bar span{display:block;height:100%;background:#ef4444;transition:width .08s linear}
+    .rec-dot{position:absolute;right:14px;top:14px;display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:999px;background:rgba(239,68,68,.92);color:#fff;font-size:13px;font-weight:700;z-index:3}
+    .stage-controls{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap}
+    .stage-controls .spacer{flex:1}
+    .result-card{position:sticky;top:84px}
+    .result{padding:22px 20px;display:grid;gap:16px}
+    .result-label{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+    .result-word{font-size:44px;line-height:1.05;font-weight:800;letter-spacing:-.02em;word-break:break-word}
+    .result-word.unsure{color:var(--ink-2)}
+    .result-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .result-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .choices{display:grid;gap:8px}
+    .choice{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);text-align:left}
+    .choice:hover{border-color:var(--brand);background:var(--brand-soft)}
+    .choice strong{flex:1;font-size:15px}
+    .choice .muted{font-size:13px}
+    .alt-row{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13.5px;flex-wrap:wrap}
+    .link-btn{border:0;background:none;padding:0;color:var(--brand);font-weight:650;font-size:13.5px;display:inline-flex;align-items:center;gap:5px}
+    .link-btn:hover{text-decoration:underline}
+    .placeholder{display:grid;gap:12px;color:var(--muted);font-size:14px}
+    .placeholder ol{margin:0;padding-left:18px;display:grid;gap:6px}
+    .recent{border-top:1px solid var(--line);padding:14px 20px 18px}
+    .recent-list{display:grid;gap:6px;margin-top:8px}
+    .recent-item{display:flex;justify-content:space-between;align-items:center;font-size:14px}
+    .sentence-card{display:flex;align-items:center;gap:16px;padding:16px 20px;flex-wrap:wrap}
+    .sentence-words{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+    .sentence-text{flex:1;min-width:200px;font-size:20px;font-weight:700}
+    .sentence-text.empty-text{font-size:15px;font-weight:500;color:var(--muted)}
+    .word-chip{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:var(--brand-soft);color:var(--brand);font-weight:650;font-size:13.5px}
+
+    /* ── Modal ── */
+    .modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.55);display:grid;place-items:center;z-index:60;padding:20px}
+    .modal{width:min(720px,100%);background:var(--surface);border-radius:18px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.3)}
+    .modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 14px 20px;border-bottom:1px solid var(--line)}
+    .modal-head h3{margin:0;font-size:17px}
+    .avatar-frame{display:block;width:100%;aspect-ratio:4/3;border:0;background:#3a4250}
+
+    /* ── Dictionary ── */
+    .dict{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:20px;align-items:start}
+    .dict-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+    .card-button{display:grid;gap:2px;padding:14px;border-radius:14px;border:1px solid var(--line);background:var(--surface);text-align:left;transition:border-color .15s,box-shadow .15s}
+    .card-button:hover{border-color:var(--brand);box-shadow:var(--shadow-sm)}
+    .card-button.active{border-color:var(--brand);background:var(--brand-soft)}
+    .card-button strong{font-size:15.5px}
+    .card-button span{font-size:13px;color:var(--muted)}
+    .dict-side{position:sticky;top:84px}
+    .search{position:relative}
+    .search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted)}
+    .search .input{padding-left:38px}
+
+    /* ── Home, auth ── */
+    .hero{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px}
+    .hero-main{padding:28px}
+    .hero-main h1{margin:0 0 8px;font-size:30px;line-height:1.15;letter-spacing:-.02em}
+    .hero-main p{margin:0 0 22px;color:var(--ink-2);font-size:16px;max-width:560px}
+    .steps{display:grid;gap:14px}
+    .step{display:flex;gap:14px;align-items:flex-start}
+    .step-num{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--brand-soft);color:var(--brand);font-weight:800;font-size:14px}
+    .step strong{display:block;font-size:15px}
+    .step span{color:var(--muted);font-size:14px}
+    .stat{padding:18px 20px}
+    .stat .label{font-size:13px;color:var(--muted);font-weight:600}
+    .stat .value{font-size:26px;font-weight:800;margin-top:4px;letter-spacing:-.01em}
+    .stat .sub{font-size:13px;color:var(--muted)}
+    .auth{min-height:100vh;display:grid;place-items:center;padding:24px}
+    .auth-card{width:min(420px,100%);padding:30px}
+    .auth-card .brand{margin-bottom:22px}
+    .auth-card h1{margin:0 0 6px;font-size:22px}
+    .auth-card > p{margin:0 0 20px;color:var(--muted)}
+    .auth-foot{margin-top:18px;text-align:center;font-size:12.5px;color:var(--muted)}
+    .settings-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)}
     .settings-row:last-child{border-bottom:0}
-    .settings-row strong{display:block;font-size:13px}
-    .settings-row span{display:block;color:var(--muted);font-size:12px;margin-top:3px}
-    .avatar-grid{
-      display:grid;
-      grid-template-columns:minmax(0,1fr) 340px;
-      gap:16px;
-      align-items:start;
+    .settings-row strong{display:block;font-size:15px}
+    .settings-row span{font-size:13.5px;color:var(--muted)}
+    .kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+    .kv-item{padding:14px 16px;border:1px solid var(--line);border-radius:12px}
+    .kv-item .k{font-size:12.5px;color:var(--muted);font-weight:650}
+    .kv-item .v{font-size:18px;font-weight:750;margin-top:2px}
+    .kv-item .s{font-size:12.5px;color:var(--muted);margin-top:2px}
+    .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;box-shadow:var(--shadow);z-index:70}
+
+    @media (max-width:1080px){
+      .live,.dict,.hero{grid-template-columns:minmax(0,1fr)}
+      .result-card,.dict-side{position:static}
+      .cols-4{grid-template-columns:repeat(2,minmax(0,1fr))}
     }
-    .avatar-frame{
-      width:100%;
-      height:620px;
-      border:0;
-      display:block;
-      background:#0b1220;
-      border-radius:8px;
-    }
-    .word-list{display:flex;flex-direction:column;gap:7px;max-height:558px;overflow:auto}
-    .word-btn{
-      min-height:38px;
-      border-radius:8px;
-      border:1px solid var(--line);
-      background:#fff;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      padding:0 10px;
-      gap:8px;
-      text-align:left;
-    }
-    .word-btn:hover{border-color:var(--brand-2)}
-    .login-link{
-      color:var(--brand-2);
-      background:transparent;
-      padding:0;
-      font-weight:900;
-    }
-    @media (max-width:1200px){
-      .grid.cols-4{grid-template-columns:repeat(2,minmax(0,1fr))}
-      .live-layout,.avatar-grid{grid-template-columns:1fr}
-      .avatar-frame{height:520px}
-    }
-    @media (max-width:900px){
-      .app{grid-template-columns:1fr}
-      .sidebar{
-        position:fixed;
-        inset:0 auto 0 0;
-        width:286px;
-        transform:translateX(-102%);
-        transition:.2s ease;
-      }
-      .sidebar.open{transform:translateX(0)}
-      .mobile-menu{display:grid}
-      .topbar{padding:14px 16px}
-      .content{padding:16px}
-      .grid.cols-2,.grid.cols-3,.grid.cols-4{grid-template-columns:1fr}
-      .auth-shell{grid-template-columns:1fr}
-      .auth-brand{min-height:auto;padding:28px}
-      .auth-stats{grid-template-columns:1fr}
-    }
-    @media (max-width:560px){
-      .page-title h2{font-size:19px}
-      .top-actions{display:none}
-      .camera-controls{align-items:stretch}
-      .control-left,.control-right,.btn{width:100%}
-      .btn{justify-content:center}
-      .prediction-label{font-size:30px}
-      .auth-form{padding:24px}
-      .live-layout{grid-template-columns:minmax(0,1fr)}
+    @media (max-width:760px){
+      .topbar{padding:0 14px;gap:10px}
+      .nav{display:none}
+      .mobile-only{display:inline-grid}
+      .nav.open{display:flex;flex-direction:column;position:absolute;top:64px;left:0;right:0;background:var(--surface);border-bottom:1px solid var(--line);padding:8px;margin:0}
+      .top-right .pill{display:none}
+      .page{padding:20px 16px 40px}
+      .cols-2,.cols-3,.cols-4{grid-template-columns:minmax(0,1fr)}
+      .result-word{font-size:36px}
+      .countdown{font-size:84px}
+      .stage-controls .btn{flex:1}
     }
   </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const {useCallback, useEffect, useMemo, useRef, useState} = React;
+const {useCallback, useEffect, useRef, useState} = React;
 
 const API = {
   baseUrl: window.location.origin || "http://127.0.0.1:8000",
@@ -595,14 +271,12 @@ const API = {
     live: "/api/predict/live226",
     history: "/api/history",
     summary: "/api/me/summary",
-    modelStatus: "/api/model/status",
     dictionary: "/api/dictionary",
     settings: "/api/settings",
     adminOverview: "/api/admin/overview",
     adminUsers: "/api/admin/users",
     adminLogs: "/api/admin/logs",
     adminModel: "/api/admin/model",
-    signs: "/signs",
     avatar3d: "/avatar3d"
   }
 };
@@ -611,33 +285,25 @@ window.SIGNTURK_API = API;
 // A recording is 4 seconds at about 12 fps; the server cuts the sign out of it.
 const CLIP_FRAMES = 48;
 const CLIP_INTERVAL_MS = 83;
-
-function recordFrames(model){ return model?.record_frames || CLIP_FRAMES; }
-const WATCH_LABELS = {waiting:"Bekliyor", signing:"İşaret", reading:"Okunuyor"};
-function recordSeconds(model){ return Math.round(recordFrames(model) / (model?.camera_fps || 12)); }
 const MODEL_STATES = {ready:"Hazır", loading:"Yükleniyor", idle:"Bekliyor", missing:"Dosyalar eksik", error:"Hata", disabled:"Kapalı"};
 const DEVICE_NAMES = {cuda:"GPU", cpu:"CPU"};
+const STORAGE_KEY = "signturk_user";
 
-// true when the model is ready, false when it failed, undefined while it loads
-function modelOk(model){
-  if (model?.ready) return true;
-  return !model || model.state === "loading" || model.state === "idle" ? undefined : false;
-}
+function recordFrames(model){ return model?.record_frames || CLIP_FRAMES; }
 
-const routes = [
-  {id:"dashboard", label:"Panel", icon:"Home"},
-  {id:"live", label:"Canlı Çeviri", icon:"Camera"},
+const ROUTES = [
+  {id:"home", label:"Ana sayfa", icon:"House"},
+  {id:"live", label:"Çeviri", icon:"Camera"},
   {id:"dictionary", label:"Sözlük", icon:"BookOpen"},
-  {id:"avatar3d", label:"3D Animasyon", icon:"Box"},
-  {id:"history", label:"Geçmiş", icon:"History"},
-  {id:"settings", label:"Ayarlar", icon:"Settings"}
+  {id:"history", label:"Geçmiş", icon:"History"}
 ];
-const adminRoutes = [
-  {id:"admin/overview", label:"Admin Panel", icon:"Shield"},
-  {id:"admin/users", label:"Kullanıcılar", icon:"Users"},
-  {id:"admin/model", label:"Model Durumu", icon:"Cpu"},
-  {id:"admin/logs", label:"Loglar", icon:"ListChecks"}
+const ADMIN_TABS = [
+  {id:"admin/overview", label:"Genel bakış"},
+  {id:"admin/users", label:"Kullanıcılar"},
+  {id:"admin/model", label:"Model"},
+  {id:"admin/logs", label:"Kayıtlar"}
 ];
+const LEGACY_ROUTES = {dashboard:"home", avatar3d:"dictionary"};
 
 function Icon({name, size=18, strokeWidth=2}){
   const icon = window.lucide?.icons?.[name];
@@ -651,16 +317,20 @@ function Icon({name, size=18, strokeWidth=2}){
 }
 
 function percent(value){
-  const n = Number(value || 0);
-  return `${Math.round(Math.max(0, Math.min(1, n)) * 100)}%`;
+  return `%${Math.round(Math.max(0, Math.min(1, Number(value || 0))) * 100)}`;
+}
+
+// "59.8" or "59.8%" from the server, written the Turkish way: %59,8
+function trPercent(value){
+  const number = Number(String(value ?? "").replace("%", ""));
+  if (value == null || value === "-" || value === "" || Number.isNaN(number)) return "-";
+  return `%${number.toLocaleString("tr-TR", {maximumFractionDigits:1})}`;
 }
 
 function initials(user){
-  const source = user?.full_name || user?.name || user?.email || "ST";
-  return source.split(/[\s@.]+/).filter(Boolean).slice(0,2).map(x => x[0]?.toUpperCase()).join("") || "ST";
+  const source = user?.full_name || user?.email || "ST";
+  return source.split(/[\s@.]+/).filter(Boolean).slice(0,2).map(x => x[0]?.toLocaleUpperCase("tr-TR")).join("") || "ST";
 }
-
-const STORAGE_KEY = "signturk_user";
 
 function storedToken(){
   try{ return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null")?.access_token || ""; }
@@ -701,11 +371,75 @@ function useHealth(poll=true){
     const id = setInterval(load, 8000);
     return () => clearInterval(id);
   }, [load, poll]);
-  return [health, load];
+  return health;
 }
 
-function StatusChip({ok, children}){
-  return <span className={`chip ${ok === true ? "ok" : ok === false ? "bad" : "warn"}`}>{ok === true ? <Icon name="CheckCircle2" size={14}/> : ok === false ? <Icon name="AlertCircle" size={14}/> : <Icon name="Clock3" size={14}/>} {children}</span>;
+function formatTime(iso, withDate=false){
+  if (!iso) return "-";
+  const date = new Date(iso);
+  return withDate
+    ? date.toLocaleString("tr-TR", {day:"numeric", month:"long", hour:"2-digit", minute:"2-digit"})
+    : date.toLocaleTimeString("tr-TR", {hour:"2-digit", minute:"2-digit"});
+}
+
+function dayLabel(iso){
+  const date = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(Date.now() - 86400000);
+  if (date.toDateString() === today.toDateString()) return "Bugün";
+  if (date.toDateString() === yesterday.toDateString()) return "Dün";
+  return date.toLocaleDateString("tr-TR", {day:"numeric", month:"long", year:"numeric"});
+}
+
+function ModelPill({model}){
+  if (!model) return <span className="pill"><span className="dot"/> Sunucu yok</span>;
+  if (model.ready) return <span className="pill good"><span className="dot"/> Model hazır · {DEVICE_NAMES[model.device] || "-"}</span>;
+  if (model.state === "loading" || model.state === "idle") return <span className="pill warn"><span className="dot pulse"/> Model yükleniyor</span>;
+  return <span className="pill bad"><span className="dot"/> {MODEL_STATES[model.state] || "Model hazır değil"}</span>;
+}
+
+function Modal({title, onClose, children}){
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()}>
+        <div className="modal-head"><h3>{title}</h3><button className="icon-btn" onClick={onClose} aria-label="Kapat"><Icon name="X"/></button></div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// The 3D avatar page, playing one sign; avatar3d.html listens for "play_sign".
+function AvatarPlayer({word, label}){
+  const frameRef = useRef(null);
+  const speedRef = useRef(1);
+  const send = useCallback(() => {
+    const target = frameRef.current?.contentWindow;
+    if (!target) return;
+    target.postMessage({type:"set_speed", value:speedRef.current}, window.location.origin);
+    if (word) target.postMessage({type:"play_sign", word, label:label || word}, window.location.origin);
+  }, [word, label]);
+  useEffect(() => {
+    apiFetch(API.endpoints.settings).then(s => { speedRef.current = Number(s?.avatar_speed) || 1; }).catch(() => {});
+  }, []);
+  useEffect(() => { send(); }, [send]);
+  return <iframe ref={frameRef} className="avatar-frame" src={API.endpoints.avatar3d} title="İşaretin 3D animasyonu" onLoad={send} />;
+}
+
+function HowToModal({sign, onClose}){
+  return (
+    <Modal title={`Nasıl yapılır: ${sign.text}`} onClose={onClose}>
+      <AvatarPlayer word={sign.gloss} label={sign.text}/>
+      <div className="card-body" style={{paddingTop:14}}>
+        <p className="muted" style={{margin:0,fontSize:14}}>Animasyon AUTSL kayıtlarından çıkarıldı. Yavaşlatmak ya da tekrar oynatmak için sol alttaki düğmeleri kullanın.</p>
+      </div>
+    </Modal>
+  );
 }
 
 function AuthScreen({onLogin}){
@@ -723,223 +457,207 @@ function AuthScreen({onLogin}){
         onLogin({...data.user, access_token:data.access_token});
       }else{
         await apiFetch(API.endpoints.register, {method:"POST", body:JSON.stringify(form)});
-        setOk("Kayıt alındı. Şimdi giriş yapabilirsiniz.");
+        setOk("Hesabınız oluşturuldu. Şimdi giriş yapabilirsiniz.");
         setMode("login");
       }
     }catch(err){ setError(err.message || "İşlem tamamlanamadı"); }
     finally{ setBusy(false); }
   };
+  const switchTo = (next) => { setMode(next); setError(""); setOk(""); };
   return (
-    <div className="auth-page">
-      <div className="auth-shell">
-        <section className="auth-brand">
-          <div>
-            <div className="brand-mark">ST</div>
-            <h1>SIGNTURK</h1>
-            <p>Türk İşaret Dili için canlı tanıma, kayıtlı geçmiş, sözlük ve 3D animasyon yönetimi tek panelde.</p>
-            <div className="auth-stats">
-              <div className="auth-stat"><strong>226</strong><span>işaret</span></div>
-              <div className="auth-stat"><strong>4 sn</strong><span>kayıt</span></div>
-              <div className="auth-stat"><strong>94%</strong><span>AUTSL doğruluk</span></div>
-            </div>
-          </div>
-          <p className="mono" style={{fontSize:12}}>FastAPI · RTMW · TensorFlow</p>
-        </section>
-        <form className="auth-form" onSubmit={submit}>
-          <h2>{mode === "login" ? "Giriş" : "Kayıt"}</h2>
-          <p>{mode === "login" ? "SIGNTURK çalışma paneline bağlanın." : "Yeni kullanıcı oluşturun."}</p>
-          {error && <div className="alert bad">{error}</div>}
-          {ok && <div className="alert ok">{ok}</div>}
-          <div className="grid" style={{gap:12}}>
-            {mode === "register" && (
-              <div className="field">
-                <label>Ad Soyad</label>
-                <input className="input" value={form.full_name} onChange={e => setForm({...form, full_name:e.target.value})} required />
-              </div>
-            )}
-            <div className="field">
-              <label>E-posta</label>
-              <input className="input" type="email" value={form.email} onChange={e => setForm({...form, email:e.target.value})} required />
-            </div>
-            <div className="field">
-              <label>Şifre</label>
-              <input className="input" type="password" value={form.password} onChange={e => setForm({...form, password:e.target.value})} required />
-            </div>
-          </div>
-          <div className="auth-actions">
-            <button className="btn primary" type="submit" disabled={busy}>{busy ? "Bekleyin" : mode === "login" ? "Giriş Yap" : "Kayıt Ol"}</button>
-            <button className="btn" type="button" onClick={() => {setMode(mode === "login" ? "register" : "login"); setError(""); setOk("");}}>
-              {mode === "login" ? "Kayıt" : "Giriş"}
-            </button>
-          </div>
+    <div className="auth">
+      <div className="card auth-card">
+        <div className="brand"><span className="brand-mark">ST</span> SignTurk</div>
+        <h1>{mode === "login" ? "Hoş geldiniz" : "Hesap oluşturun"}</h1>
+        <p>Türk İşaret Dili'ni kameradan tanır, onayladığınız kelimelerden Türkçe cümle kurar.</p>
+        <div className="seg" style={{marginBottom:18,width:"100%"}}>
+          <button type="button" className={mode === "login" ? "active" : ""} style={{flex:1,justifyContent:"center"}} onClick={() => switchTo("login")}>Giriş</button>
+          <button type="button" className={mode === "register" ? "active" : ""} style={{flex:1,justifyContent:"center"}} onClick={() => switchTo("register")}>Kayıt</button>
+        </div>
+        <form className="grid" style={{gap:14}} onSubmit={submit}>
+          {error && <div className="note bad"><Icon name="CircleAlert" size={18}/>{error}</div>}
+          {ok && <div className="note good"><Icon name="CircleCheck" size={18}/>{ok}</div>}
+          {mode === "register" && (
+            <div className="field"><label htmlFor="name">Ad soyad</label>
+              <input id="name" className="input" value={form.full_name} onChange={e => setForm({...form, full_name:e.target.value})} required autoComplete="name"/></div>
+          )}
+          <div className="field"><label htmlFor="email">E-posta</label>
+            <input id="email" className="input" type="email" value={form.email} onChange={e => setForm({...form, email:e.target.value})} required autoComplete="email"/></div>
+          <div className="field"><label htmlFor="password">Şifre</label>
+            <input id="password" className="input" type="password" value={form.password} onChange={e => setForm({...form, password:e.target.value})} required
+              autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={mode === "register" ? 8 : undefined}/></div>
+          <button className="btn primary lg block" type="submit" disabled={busy}>{busy ? <span className="spinner"/> : mode === "login" ? "Giriş yap" : "Hesap oluştur"}</button>
         </form>
+        <div className="auth-foot">226 işaret · AUTSL veri seti</div>
       </div>
     </div>
   );
 }
 
 function Shell({user, setUser}){
-  const [route, setRoute] = useState(() => location.hash.replace("#/","") || "dashboard");
-  const [menu, setMenu] = useState(false);
-  const [health] = useHealth(true);
+  const parse = () => { const raw = location.hash.replace("#/","") || "home"; return LEGACY_ROUTES[raw] || raw; };
+  const [route, setRoute] = useState(parse);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
+  const health = useHealth(true);
+  const model = health?.model_226;
   const isAdmin = (user?.role || "").toLowerCase() === "admin";
-  const allRoutes = isAdmin ? [...routes, ...adminRoutes] : routes;
   useEffect(() => {
-    const onHash = () => setRoute(location.hash.replace("#/","") || "dashboard");
+    const onHash = () => setRoute(parse());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
-  const navigate = (id) => { location.hash = "#/" + id; setRoute(id); setMenu(false); };
-  const active = allRoutes.some(r => r.id === route) ? route : "dashboard";
-  const page = {
-    dashboard:<Dashboard navigate={navigate} health={health}/>,
-    live:<LivePage/>,
-    dictionary:<DictionaryPage/>,
-    avatar3d:<Avatar3DPage/>,
-    history:<HistoryPage/>,
-    settings:<SettingsPage/>,
-    "admin/overview":<AdminOverview/>,
-    "admin/users":<AdminUsers/>,
-    "admin/model":<AdminModel/>,
-    "admin/logs":<AdminLogs/>
-  }[active] || <Dashboard navigate={navigate} health={health}/>;
-  const title = {
-    dashboard:["Panel","Sistem, model ve son kayıtlar"],
-    live:["Canlı Çeviri","İşaretler tek tek tanınır: kayıtla ya da düğmesiz"],
-    dictionary:["Sözlük","226 işaret, Türkçe ve İngilizce"],
-    avatar3d:["3D Animasyon","Kayıtlı işaret animasyonları"],
-    history:["Geçmiş","Başarılı canlı tahmin kayıtları"],
-    settings:["Ayarlar","Sesli okuma ve avatar hızı"],
-    "admin/overview":["Admin Panel","Genel sistem özeti"],
-    "admin/users":["Kullanıcılar","Hesap ve rol listesi"],
-    "admin/model":["Model Durumu","Yüklenen model ve pipeline bilgisi"],
-    "admin/logs":["Loglar","Backend olay kayıtları"]
-  }[active] || ["Panel",""];
-  return (
-    <div className="app">
-      <aside className={`sidebar ${menu ? "open" : ""}`}>
-        <div className="brand">
-          <div className="brand-mark">ST</div>
-          <div><h1>SIGNTURK</h1><p>Canlı işaret tanıma</p></div>
-        </div>
-        <nav className="nav">
-          <div className="nav-label">Uygulama</div>
-          {routes.map(r => <button key={r.id} className={active===r.id ? "active" : ""} onClick={() => navigate(r.id)}><Icon name={r.icon}/>{r.label}</button>)}
-          {isAdmin && <div className="nav-label">Yönetim</div>}
-          {isAdmin && adminRoutes.map(r => <button key={r.id} className={active===r.id ? "active" : ""} onClick={() => navigate(r.id)}><Icon name={r.icon}/>{r.label}</button>)}
-        </nav>
-        <div className="sidebar-footer">
-          <div className="avatar">{initials(user)}</div>
-          <div className="user-meta"><strong>{user?.full_name || user?.name || "Kullanıcı"}</strong><span>{user?.email}</span></div>
-          <button className="icon-btn" title="Çıkış" onClick={() => setUser(null)}><Icon name="LogOut"/></button>
-        </div>
-      </aside>
-      <main className="main">
-        <header className="topbar">
-          <button className="icon-btn mobile-menu" onClick={() => setMenu(!menu)}><Icon name={menu ? "X" : "Menu"}/></button>
-          <div className="page-title"><h2>{title[0]}</h2><p>{title[1]}</p></div>
-          <div className="top-actions">
-            <StatusChip ok={modelOk(health?.model_226)}>Model</StatusChip>
-            <span className="chip"><Icon name="Cpu" size={14}/> {DEVICE_NAMES[health?.model_226?.device] || "-"}</span>
-            <span className="chip"><Icon name="Layers" size={14}/> {recordSeconds(health?.model_226)} sn kayıt</span>
-          </div>
-        </header>
-        <div className="content">{page}</div>
-      </main>
-    </div>
-  );
-}
-
-function Metric({label, value, sub, icon, ok}){
-  return (
-    <div className="panel metric">
-      <div>
-        <div className="label">{label}</div>
-        <div className="value">{value}</div>
-        <div className="sub">{sub}</div>
-      </div>
-      <div className="metric-icon" style={ok===false ? {background:"#fff1f2",color:"var(--red)"} : {}}><Icon name={icon}/></div>
-    </div>
-  );
-}
-
-function Dashboard({navigate, health}){
-  const model = health?.model_226;
-  const [history, setHistory] = useState([]);
-  const [summary, setSummary] = useState(null);
   useEffect(() => {
-    apiFetch(API.endpoints.history).then(d => setHistory(Array.isArray(d) ? d.slice(0,6) : [])).catch(() => {});
-    apiFetch(API.endpoints.summary).then(setSummary).catch(() => {});
-  }, []);
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [menuOpen]);
+  const navigate = (id) => { location.hash = "#/" + id; setRoute(id); setNavOpen(false); setMenuOpen(false); window.scrollTo(0, 0); };
+  const known = ["home","live","dictionary","history","settings"].includes(route) || (isAdmin && route.startsWith("admin/"));
+  const active = known ? route : "home";
+  let page;
+  if (active === "live") page = <LivePage model={model}/>;
+  else if (active === "dictionary") page = <DictionaryPage/>;
+  else if (active === "history") page = <HistoryPage/>;
+  else if (active === "settings") page = <SettingsPage/>;
+  else if (active.startsWith("admin/")) page = <AdminPage tab={active} navigate={navigate} model={model}/>;
+  else page = <HomePage user={user} model={model} navigate={navigate}/>;
   return (
-    <div className="grid" style={{gap:16}}>
-      <div className="grid cols-4">
-        <Metric label="Model" value={MODEL_STATES[model?.state] || "Bekliyor"} sub={`${model?.num_classes || 226} işaret`} icon="Cpu" ok={modelOk(model)}/>
-        <Metric label="Cihaz" value={DEVICE_NAMES[model?.device] || "-"} sub={model?.avg_frame_ms != null ? `${model.avg_frame_ms} ms / kare` : "RTMW ve YOLOX"} icon="Activity" ok={modelOk(model)}/>
-        <Metric label="Kayıt" value={`${recordSeconds(model)} sn`} sub={`${recordFrames(model)} kare, işaret kırpılır`} icon="Layers" ok/>
-        <Metric label="Onay eşiği" value={percent(model?.thresholds?.top1 ?? .7)} sub="ilk tahmin için" icon="Gauge" ok/>
-      </div>
-      <div className="grid cols-2">
-        <section className="panel">
-          <div className="panel-head"><div><h3>Canlı Çeviri</h3><span>Kayıtla ya da düğmesiz</span></div><button className="btn primary" onClick={() => navigate("live")}><Icon name="Play"/> Başlat</button></div>
-          <div className="panel-body">
-            <div className="grid cols-3">
-              <Metric label="Kayıt" value="~12 kare/sn" sub="kamera gönderimi" icon="Radio" ok/>
-              <Metric label="Onaylanan" value={summary ? String(summary.translations) : "-"} sub="kelime" icon="Database" ok/>
-              <Metric label="Ortalama güven" value={summary?.translations ? `${summary.avg_confidence}%` : "-"} sub="onaylanan kelimeler" icon="Gauge" ok/>
-            </div>
-          </div>
-        </section>
-        <section className="panel">
-          <div className="panel-head"><div><h3>Son Onaylanan Kelimeler</h3><span>Geçmiş kayıtları</span></div><button className="btn small" onClick={() => navigate("history")}><Icon name="History" size={15}/> Aç</button></div>
-          <div className="panel-body">
-            {history.length === 0 ? <div className="empty">Henüz kayıt yok.</div> : (
-              <div className="transcript">
-                {history.map((h,i) => <div className="transcript-item" key={h.id ?? i}><strong>{h.text || h.result || "-"}</strong><span className="chip">{h.confidence || "-"}</span></div>)}
+    <>
+      <header className="topbar">
+        <button className="icon-btn mobile-only" onClick={() => setNavOpen(v => !v)} aria-label="Menü"><Icon name={navOpen ? "X" : "Menu"}/></button>
+        <button className="brand" onClick={() => navigate("home")}><span className="brand-mark">ST</span> SignTurk</button>
+        <nav className={`nav ${navOpen ? "open" : ""}`}>
+          {ROUTES.map(r => (
+            <button key={r.id} className={active === r.id ? "active" : ""} onClick={() => navigate(r.id)}><Icon name={r.icon} size={17}/>{r.label}</button>
+          ))}
+        </nav>
+        <div className="top-right">
+          <ModelPill model={model}/>
+          <div style={{position:"relative"}}>
+            <button className="user-btn" onClick={e => { e.stopPropagation(); setMenuOpen(v => !v); }} aria-haspopup="menu" aria-expanded={menuOpen}>
+              <span className="avatar-circle">{initials(user)}</span><Icon name="ChevronDown" size={16}/>
+            </button>
+            {menuOpen && (
+              <div className="menu" role="menu" onClick={e => e.stopPropagation()}>
+                <div className="menu-head"><strong>{user?.full_name || "Kullanıcı"}</strong><span>{user?.email}</span></div>
+                <button role="menuitem" onClick={() => navigate("settings")}><Icon name="Settings" size={17}/> Ayarlar</button>
+                {isAdmin && <button role="menuitem" onClick={() => navigate("admin/overview")}><Icon name="Shield" size={17}/> Yönetim</button>}
+                <button role="menuitem" onClick={() => setUser(null)}><Icon name="LogOut" size={17}/> Çıkış</button>
               </div>
             )}
           </div>
+        </div>
+      </header>
+      <main className="page">{page}</main>
+    </>
+  );
+}
+
+function HomePage({user, model, navigate}){
+  const [recent, setRecent] = useState([]);
+  const [summary, setSummary] = useState(null);
+  useEffect(() => {
+    apiFetch(API.endpoints.history).then(d => setRecent(Array.isArray(d) ? d.slice(0, 8) : [])).catch(() => {});
+    apiFetch(API.endpoints.summary).then(setSummary).catch(() => {});
+  }, []);
+  const firstName = (user?.full_name || "").split(" ")[0];
+  return (
+    <div className="grid" style={{gap:20}}>
+      <div className="hero">
+        <section className="card hero-main">
+          <h1>{firstName ? `Merhaba, ${firstName}` : "Merhaba"}</h1>
+          <p>Kameranın önünde bir işaret yapın; SignTurk tanır, siz onaylayınca cümleye ekler. 226 Türk İşaret Dili işaretini bilir.</p>
+          <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+            <button className="btn primary lg" onClick={() => navigate("live")}><Icon name="Camera"/> Çeviriye başla</button>
+            <button className="btn lg" onClick={() => navigate("dictionary")}><Icon name="BookOpen"/> İşaretlere bak</button>
+          </div>
+        </section>
+        <section className="card">
+          <div className="card-head"><div><h2>İyi sonuç için</h2><p>Model, işaretçinin belden yukarısını gören kayıtlarla eğitildi.</p></div></div>
+          <div className="card-body steps">
+            <div className="step"><span className="step-num">1</span><div><strong>Kameradan biraz uzaklaşın</strong><span>Belden yukarınız ve elleriniz görünsün; kadraj çerçevesi yeşile döner.</span></div></div>
+            <div className="step"><span className="step-num">2</span><div><strong>İşareti yapın, sonra ellerinizi indirin</strong><span>İşaretin bittiğini ellerinizin dinlenmeye dönmesinden anlar.</span></div></div>
+            <div className="step"><span className="step-num">3</span><div><strong>Doğru ya da Yanlış'a basın</strong><span>Onayladığınız kelimelerden cümle kendiliğinden kurulur.</span></div></div>
+          </div>
         </section>
       </div>
+      <div className="grid cols-3">
+        <section className="card stat"><div className="label">Model</div><div className="value">{MODEL_STATES[model?.state] || "Bağlantı yok"}</div>
+          <div className="sub">{model?.ready ? `${DEVICE_NAMES[model.device] || "-"} üzerinde · ${model.continuous ? "düğmesiz mod açık" : "düğmesiz mod GPU ister"}` : (model?.message || "Sunucu yanıt vermiyor")}</div></section>
+        <section className="card stat"><div className="label">Onaylanan kelime</div><div className="value">{summary ? summary.translations : "-"}</div><div className="sub">tüm oturumlarınızda</div></section>
+        <section className="card stat"><div className="label">Ortalama güven</div><div className="value">{summary?.translations ? trPercent(summary.avg_confidence) : "-"}</div><div className="sub">onaylanan kelimelerde</div></section>
+      </div>
+      <section className="card">
+        <div className="card-head"><div><h2>Son onaylanan kelimeler</h2></div><button className="btn sm" onClick={() => navigate("history")}>Tümü</button></div>
+        <div className="card-body">
+          {recent.length ? (
+            <div className="sentence-words">{recent.map((r, i) => <span className="word-chip" key={r.id ?? i}>{r.text || r.result}</span>)}</div>
+          ) : <div className="empty" style={{padding:"8px 0"}}>Henüz onaylanan kelime yok.</div>}
+        </div>
+      </section>
     </div>
   );
 }
 
-function LivePage(){
+// Where an AUTSL-like frame puts the signer: shoulders about a fifth of the
+// width across and a third of the way down, twice their width free below them.
+function FramingGuide({ok}){
+  const color = ok === false ? "#f59e0b" : ok ? "#22c55e" : "rgba(255,255,255,.75)";
+  return (
+    <svg className="guide" viewBox="0 0 160 100" preserveAspectRatio="none" aria-hidden="true">
+      <g fill="none" stroke={color} strokeWidth="1.5" strokeDasharray="5 6" strokeOpacity="0.9" vectorEffect="non-scaling-stroke">
+        <ellipse cx="80" cy="20" rx="6.5" ry="8.5"/>
+        <path d="M 75 28 L 75 31 Q 66 31.5 62 35 Q 59 38 58.5 46 L 56 100 M 85 28 L 85 31 Q 94 31.5 98 35 Q 101 38 101.5 46 L 104 100"/>
+      </g>
+    </svg>
+  );
+}
+
+function LivePage({model}){
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const wsRef = useRef(null);
   const streamRef = useRef(null);
   const clipTimerRef = useRef(null);
+  const streamTimerRef = useRef(null);
+  const previewTimerRef = useRef(null);
+  const previewBusyRef = useRef(false);
+  const inFlightRef = useRef(0);
+  const modeRef = useRef("record");
+  const autoApproveRef = useRef(false);
+  const speechRef = useRef(false);
   const speechRateRef = useRef(1);
+  const keyRef = useRef({});
   const [running, setRunning] = useState(false);
   const [starting, setStarting] = useState(false);
-  const [status, setStatus] = useState("Hazır");
-  const [recent, setRecent] = useState([]);
-  const [mirrorPreview, setMirrorPreview] = useState(true);
-  const [speech, setSpeech] = useState(false);
   const [error, setError] = useState("");
   const [devices, setDevices] = useState([]);
   const [deviceId, setDeviceId] = useState("");
-  const [pending, setPending] = useState(null);
-  const [sentenceWords, setSentenceWords] = useState([]);
-  const [sentence, setSentence] = useState("");
+  const [mirror, setMirror] = useState(true);
+  const [speech, setSpeech] = useState(false);
+  const [mode, setMode] = useState("record");      // record, continuous (hands-free)
+  const [watch, setWatch] = useState("off");       // off, waiting, signing, reading
+  const [autoApprove, setAutoApprove] = useState(false);
   const [clipState, setClipState] = useState("idle");   // idle, countdown, recording, processing
   const [countdown, setCountdown] = useState(0);
-  const [clipProgress, setClipProgress] = useState({sent:0, processed:0});
+  const [sent, setSent] = useState(0);
   const [result, setResult] = useState(null);
-  const [mode, setMode] = useState("record");   // record, continuous (hands-free)
-  const [watch, setWatch] = useState("off");    // off, waiting, signing, reading
-  const modeRef = useRef("record");
-  const [autoApprove, setAutoApprove] = useState(false);   // hands-free: confident results skip approval
-  const autoApproveRef = useRef(false);
-  const streamTimerRef = useRef(null);
-  const inFlightRef = useRef(0);
-  const [health] = useHealth(true);
-  const model = health?.model_226;
-  const ready = !!model?.ready;
+  const [pending, setPending] = useState(null);
+  const [approved, setApproved] = useState(null);
+  const [words, setWords] = useState([]);
+  const [sentence, setSentence] = useState("");
+  const [framing, setFraming] = useState(null);
+  const [recent, setRecent] = useState([]);
+  const [howTo, setHowTo] = useState(null);
+  const [aspect, setAspect] = useState(16 / 10);
   const clipFrames = recordFrames(model);
+  const ready = !!model?.ready;
   const canContinuous = !!model?.continuous;
+  const previewEvery = model?.device === "cuda" ? 250 : 1000;
+
+  useEffect(() => { speechRef.current = speech; }, [speech]);
   useEffect(() => {
     apiFetch(API.endpoints.settings).then(s => {
       setSpeech(!!s?.tts_enabled);
@@ -948,118 +666,81 @@ function LivePage(){
   }, []);
 
   const loadDevices = useCallback(async () => {
-    try{
-      const list = await navigator.mediaDevices.enumerateDevices();
-      setDevices(list.filter(d => d.kind === "videoinput"));
-    }catch{}
+    try{ setDevices((await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput")); }catch{}
   }, []);
 
-  useEffect(() => {
-    loadDevices();
-    return () => stopLive();
+  const clearTimers = useCallback(() => {
+    for (const ref of [clipTimerRef, streamTimerRef, previewTimerRef]){
+      if (ref.current){ clearTimeout(ref.current); clearInterval(ref.current); ref.current = null; }
+    }
+    inFlightRef.current = 0;
+    previewBusyRef.current = false;
   }, []);
 
   const stopLive = useCallback(() => {
-    if (clipTimerRef.current){ clearTimeout(clipTimerRef.current); clearInterval(clipTimerRef.current); clipTimerRef.current = null; }
-    if (streamTimerRef.current){ clearInterval(streamTimerRef.current); streamTimerRef.current = null; }
-    inFlightRef.current = 0;
-    setWatch("off");
-    setClipState("idle");
-    setCountdown(0);
-    if (wsRef.current){
-      try{ wsRef.current.close(); }catch{}
-      wsRef.current = null;
-    }
-    if (streamRef.current){
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
+    clearTimers();
+    if (wsRef.current){ try{ wsRef.current.close(); }catch{} wsRef.current = null; }
+    if (streamRef.current){ streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     if (videoRef.current) videoRef.current.srcObject = null;
-    setRunning(false);
-    setStarting(false);
-    setPending(null);
-    setStatus("Durduruldu");
-  }, []);
+    setRunning(false); setStarting(false); setClipState("idle"); setCountdown(0); setWatch("off"); setFraming(null); setPending(null);
+  }, [clearTimers]);
 
-  // Frames are sent unmirrored; only the preview is mirrored with CSS.
-  const captureFrame = useCallback((targetW = 640, quality = 0.8) => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
+  useEffect(() => { loadDevices(); return () => stopLive(); }, []);
+
+  // Frames are sent unmirrored at 640 px wide; only the preview is mirrored.
+  const captureFrame = useCallback(() => {
+    const video = videoRef.current, canvas = canvasRef.current;
     if (!video || !canvas || !video.videoWidth || !video.videoHeight) return null;
-    const targetH = Math.max(260, Math.round(targetW * video.videoHeight / video.videoWidth));
-    canvas.width = targetW;
-    canvas.height = targetH;
-    const ctx = canvas.getContext("2d", {willReadFrequently:false});
-    ctx.drawImage(video, 0, 0, targetW, targetH);
-    return canvas.toDataURL("image/jpeg", quality);
+    canvas.width = 640;
+    canvas.height = Math.round(640 * video.videoHeight / video.videoWidth);
+    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.8);
   }, []);
 
-  const speak = useCallback((text) => {
-    if (!speech || !text || !window.speechSynthesis) return;
+  const send = useCallback((obj) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN){ ws.send(JSON.stringify(obj)); return true; }
+    return false;
+  }, []);
+
+  const speak = useCallback((text, always=false) => {
+    if ((!speechRef.current && !always) || !text || !window.speechSynthesis) return;
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = "tr-TR";
     utter.rate = speechRateRef.current;
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utter);
-  }, [speech]);
-
-  const sendAction = useCallback((obj) => {
-    const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
   }, []);
 
-  const approveWord = useCallback(() => {
-    if (pending) sendAction({action:"approve", word:pending.word});
-  }, [pending, sendAction]);
+  // Between recordings a few frames a second only check the framing.
+  const startPreview = useCallback(() => {
+    if (previewTimerRef.current) clearInterval(previewTimerRef.current);
+    previewBusyRef.current = false;
+    previewTimerRef.current = setInterval(() => {
+      if (previewBusyRef.current) return;
+      const image = captureFrame();
+      if (image && send({image, preview:true})) previewBusyRef.current = true;
+    }, previewEvery);
+  }, [captureFrame, send, previewEvery]);
 
-  const rejectWord = useCallback(() => {
-    setPending(null);
-    sendAction({action:"reject"});
-  }, [sendAction]);
+  const stopPreview = useCallback(() => {
+    if (previewTimerRef.current){ clearInterval(previewTimerRef.current); previewTimerRef.current = null; }
+    previewBusyRef.current = false;
+  }, []);
 
-  const undoWord = useCallback(() => sendAction({action:"undo"}), [sendAction]);
-  const resetSentence = useCallback(() => sendAction({action:"reset_sentence"}), [sendAction]);
-  const approveGloss = useCallback((gloss) => sendAction({action:"approve", word:gloss}), [sendAction]);
-
-  // 3-2-1, then the frames streamed as they are captured, then "end".
-  const recordSign = useCallback(() => {
-    if (clipState !== "idle") return;
-    setResult(null);
-    setPending(null);
-    setClipState("countdown");
-    let remaining = 3;
-    setCountdown(remaining);
-    const tick = () => {
-      remaining -= 1;
-      if (remaining > 0){
-        setCountdown(remaining);
-        clipTimerRef.current = setTimeout(tick, 1000);
-        return;
-      }
-      setCountdown(0);
-      setClipState("recording");
-      setStatus("Kaydediliyor");
-      setClipProgress({sent:0, processed:0});
-      sendAction({action:"start"});
-      let sent = 0;
-      clipTimerRef.current = setInterval(() => {
-        const image = captureFrame();
-        if (image){
-          sendAction({image});
-          sent += 1;
-          setClipProgress(prev => ({...prev, sent}));
-        }
-        if (sent >= clipFrames){
-          clearInterval(clipTimerRef.current);
-          clipTimerRef.current = null;
-          sendAction({action:"end"});
-          setClipState("processing");
-          setStatus("İşleniyor");
-        }
-      }, CLIP_INTERVAL_MS);
-    };
-    clipTimerRef.current = setTimeout(tick, 1000);
-  }, [clipState, clipFrames, captureFrame, sendAction]);
+  // Hands-free: frames go out without a button, at most two awaiting an answer.
+  const startStream = useCallback(() => {
+    stopPreview();
+    if (streamTimerRef.current) clearInterval(streamTimerRef.current);
+    inFlightRef.current = 0;
+    send({action:"continuous", auto_approve:autoApproveRef.current});
+    setWatch("waiting");
+    streamTimerRef.current = setInterval(() => {
+      if (inFlightRef.current >= 2) return;
+      const image = captureFrame();
+      if (image && send({image})) inFlightRef.current += 1;
+    }, CLIP_INTERVAL_MS);
+  }, [captureFrame, send, stopPreview]);
 
   const stopStream = useCallback(() => {
     if (streamTimerRef.current){ clearInterval(streamTimerRef.current); streamTimerRef.current = null; }
@@ -1067,327 +748,363 @@ function LivePage(){
     setWatch("off");
   }, []);
 
-  // Hands-free: frames go out without a button, at most two awaiting an answer.
-  // The server cuts each sign out of the stream; results wait for approval
-  // unless automatic approval is on.
-  const startStream = useCallback(() => {
-    stopStream();
-    setResult(null);
-    setPending(null);
-    sendAction({action:"continuous", auto_approve:autoApproveRef.current});
-    setWatch("waiting");
-    setStatus("İşaret bekleniyor · her işaretten sonra ellerinizi indirin");
-    streamTimerRef.current = setInterval(() => {
-      if (inFlightRef.current >= 2) return;
-      const image = captureFrame();
-      if (!image) return;
-      inFlightRef.current += 1;
-      sendAction({image});
-    }, CLIP_INTERVAL_MS);
-  }, [captureFrame, sendAction, stopStream]);
-
-  const toggleAutoApprove = useCallback(() => {
-    const next = !autoApproveRef.current;
-    autoApproveRef.current = next;
-    setAutoApprove(next);
-    if (streamTimerRef.current) sendAction({action:"continuous", auto_approve:next});
-  }, [sendAction]);
+  const recordSign = useCallback(() => {
+    if (clipState !== "idle" || !running || modeRef.current !== "record") return;
+    stopPreview();
+    setResult(null); setPending(null); setApproved(null);
+    setClipState("countdown");
+    let remaining = 3;
+    setCountdown(remaining);
+    const tick = () => {
+      remaining -= 1;
+      if (remaining > 0){ setCountdown(remaining); clipTimerRef.current = setTimeout(tick, 1000); return; }
+      setCountdown(0);
+      setClipState("recording");
+      setSent(0);
+      send({action:"start"});
+      let count = 0;
+      clipTimerRef.current = setInterval(() => {
+        const image = captureFrame();
+        if (image && send({image})){ count += 1; setSent(count); }
+        if (count >= clipFrames){
+          clearInterval(clipTimerRef.current); clipTimerRef.current = null;
+          send({action:"end"});
+          setClipState("processing");
+        }
+      }, CLIP_INTERVAL_MS);
+    };
+    clipTimerRef.current = setTimeout(tick, 1000);
+  }, [clipState, running, clipFrames, captureFrame, send, stopPreview]);
 
   const chooseMode = useCallback((next) => {
     if (next === modeRef.current || clipState !== "idle") return;
     modeRef.current = next;
     setMode(next);
+    setResult(null); setPending(null); setApproved(null);
     if (!running) return;
     if (next === "continuous") startStream();
-    else{
-      stopStream();
-      sendAction({action:"continuous", on:false});
-      setStatus("Hazır · işareti kaydedin");
+    else{ stopStream(); send({action:"continuous", on:false}); startPreview(); }
+  }, [clipState, running, startStream, stopStream, startPreview, send]);
+
+  const toggleAutoApprove = useCallback(() => {
+    const next = !autoApproveRef.current;
+    autoApproveRef.current = next;
+    setAutoApprove(next);
+    if (streamTimerRef.current) send({action:"continuous", auto_approve:next});
+  }, [send]);
+
+  const approve = useCallback((gloss) => {
+    if (!send(gloss ? {action:"approve", word:gloss} : {action:"approve"})) return;
+    setPending(null);
+  }, [send]);
+  const reject = useCallback(() => { send({action:"reject"}); setPending(null); setResult(null); }, [send]);
+  const undo = useCallback(() => send({action:"undo"}), [send]);
+  const clearSentence = useCallback(() => send({action:"reset_sentence"}), [send]);
+
+  const onMessage = useCallback((event) => {
+    let data;
+    try{ data = JSON.parse(event.data); }catch{ return; }
+    if (data.type === "unavailable"){ setError(data.message || "Model hazır değil."); return; }
+    if (data.type === "framing"){ previewBusyRef.current = false; setFraming(data); return; }
+    if (data.type === "watching"){
+      inFlightRef.current = Math.max(0, inFlightRef.current - 1);
+      if (modeRef.current === "continuous"){ setWatch(data.state); if (data.framing) setFraming(data.framing); }
+      return;
     }
-  }, [clipState, running, startStream, stopStream, sendAction]);
+    if (data.type === "continuous"){
+      if (!data.on && modeRef.current === "continuous"){
+        stopStream(); modeRef.current = "record"; setMode("record"); startPreview();
+        if (data.error) setError(data.error);
+      }
+      return;
+    }
+    if (data.type === "result"){
+      setClipState("idle");
+      if (modeRef.current === "record") startPreview();
+      if (data.error){ setResult({error:data.error}); return; }
+      setResult(data);
+      setApproved(null);
+      if (data.framing) setFraming(data.framing);
+      setPending(data.pending_word ? {word:data.pending_word, text:data.pending_text || data.pending_word} : null);
+      const top = data.top?.[0];
+      if (top) setRecent(prev => [{text:top.text_tr, conf:top.confidence, sure:data.confident}, ...prev].slice(0, 5));
+      return;
+    }
+    if (data.type === "sentence_update"){
+      setWords(Array.isArray(data.display_words) ? data.display_words : (data.words || []));
+      setSentence(data.sentence || "");
+      setPending(null);
+      if (data.added){ setApproved(data.added); speak(data.sentence || (data.display_words || []).slice(-1)[0] || data.added); }
+      return;
+    }
+    if (data.type === "rejected") setPending(null);
+  }, [speak, startPreview, stopStream]);
 
   const startLive = useCallback(async () => {
-    setStarting(true);
-    setError("");
-    setRecent([]);
+    setStarting(true); setError("");
     try{
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          deviceId: deviceId ? {exact:deviceId} : undefined,
-          width:{ideal:960},
-          height:{ideal:600},
-          frameRate:{ideal:15, max:15}
-        },
+        video:{deviceId: deviceId ? {exact:deviceId} : undefined, width:{ideal:960}, height:{ideal:600}, frameRate:{ideal:15, max:15}},
         audio:false
       });
       streamRef.current = stream;
-      if (videoRef.current){
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
+      const video = videoRef.current;
+      video.srcObject = stream;
+      await video.play();
+      if (video.videoWidth && video.videoHeight) setAspect(video.videoWidth / video.videoHeight);
       await loadDevices();
       const ws = new WebSocket(`${API.wsUrl}${API.endpoints.live}`);
       wsRef.current = ws;
       ws.onopen = () => {
         // The token goes in the first message, not in the URL, so it stays out of server logs.
         ws.send(JSON.stringify({action:"auth", token:storedToken()}));
-        setRunning(true);
-        setStarting(false);
-        setResult(null);
-        setClipState("idle");
-        setStatus("Hazır · işareti kaydedin");
-        if (modeRef.current === "continuous") startStream();
+        setRunning(true); setStarting(false);
+        if (modeRef.current === "continuous") startStream(); else startPreview();
       };
-      ws.onmessage = (event) => {
-        try{
-          const data = JSON.parse(event.data);
-          if (data.type === "unavailable"){
-            setError(data.message || "Model hazır değil.");
-            return;
-          }
-          if (data.type === "recording") return;
-          if (data.type === "continuous"){
-            if (!data.on && modeRef.current === "continuous"){
-              stopStream();
-              modeRef.current = "record";
-              setMode("record");
-              if (data.error) setError(data.error);
-            }
-            return;
-          }
-          if (data.type === "watching"){
-            inFlightRef.current = Math.max(0, inFlightRef.current - 1);
-            if (modeRef.current === "continuous") setWatch(data.state);
-            return;
-          }
-          if (data.type === "progress"){
-            setClipProgress(prev => ({...prev, processed:data.processed || 0}));
-            return;
-          }
-          if (data.type === "result"){
-            setClipState("idle");
-            if (data.error){ setStatus(data.error); return; }
-            setResult(data);
-            const top = data.top?.[0];
-            setPending(data.pending_word ? {word:data.pending_word, text:data.pending_text || data.pending_word} : null);
-            setStatus(data.confident ? "Tahmin hazır" : "Düşük güven · listeden seçebilirsiniz");
-            if (top) setRecent(prev => [{label:top.text_tr, conf:top.confidence, at:new Date().toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}, ...prev].slice(0,10));
-            return;
-          }
-          if (data.type === "sentence_update"){
-            setSentenceWords(Array.isArray(data.display_words) ? data.display_words : (Array.isArray(data.words) ? data.words : []));
-            setSentence(data.sentence || "");
-            setPending(null);
-            setStatus("Cümle güncellendi");
-            // Only approved words are spoken: the sentence once it has two words, otherwise the word.
-            if (data.added) speak(data.sentence || (data.display_words || []).slice(-1)[0] || data.added);
-            return;
-          }
-          if (data.type === "rejected"){
-            setPending(null);
-            setStatus("Tahmin reddedildi");
-          }
-        }catch{
-          setStatus("Yanıt okunamadı");
-        }
-      };
-      ws.onerror = () => { setError("WebSocket bağlantısı kurulamadı."); setStatus("Bağlantı hatası"); };
+      ws.onmessage = onMessage;
+      ws.onerror = () => setError("Sunucuyla bağlantı kurulamadı.");
       ws.onclose = (event) => {
-        stopStream();
-        setRunning(false);
-        setClipState("idle");
-        if (event.code === 1008){ setError("Oturum süresi doldu, yeniden giriş yapın."); window.dispatchEvent(new Event("signturk:logout")); }
-        else if (!starting) setStatus("Bağlantı kapandı");
+        clearTimers();
+        setRunning(false); setClipState("idle"); setWatch("off");
+        if (event.code === 1008){ setError("Oturumunuzun süresi doldu; yeniden giriş yapın."); window.dispatchEvent(new Event("signturk:logout")); }
       };
     }catch(err){
-      setError(err.message || "Kamera açılamadı");
+      setError(err?.name === "NotAllowedError" ? "Kamera izni verilmedi. Tarayıcının adres çubuğundan izin verin." : (err.message || "Kamera açılamadı"));
       stopLive();
-    }finally{
-      setStarting(false);
-    }
-  }, [deviceId, loadDevices, stopLive, starting, speak, startStream, stopStream]);
+    }finally{ setStarting(false); }
+  }, [deviceId, loadDevices, onMessage, startPreview, startStream, stopLive, clearTimers]);
+
+  // Space records, Enter approves, Esc rejects (not while typing in a field)
+  keyRef.current = {recordSign, approve, reject, pending, running, mode};
+  useEffect(() => {
+    const onKey = (e) => {
+      if (/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(e.target.tagName) && e.key !== "Escape") return;
+      const k = keyRef.current;
+      if (e.code === "Space" && k.running && k.mode === "record"){ e.preventDefault(); k.recordSign(); }
+      else if (e.key === "Enter" && k.pending){ e.preventDefault(); k.approve(); }
+      else if (e.key === "Escape" && k.pending){ k.reject(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const top = result?.top || [];
-  const hasPrediction = top.length > 0;
+  const best = top[0];
   const confident = !!result?.confident;
-  const confPct = hasPrediction ? Math.round(Number(top[0].confidence || 0) * 100) : 0;
-  const progressPct = Math.round((clipProgress.processed / clipFrames) * 100);
-  const clipLabel = {
-    countdown: "Hazırlanın",
-    recording: `Kayıt ${clipProgress.sent}/${clipFrames}`,
-    processing: `İşleniyor ${clipProgress.processed}/${clipFrames}`,
-  }[clipState];
-  const displayLabel = clipLabel
-    || (mode === "continuous" ? {signing:"İşaret algılandı", reading:"Okunuyor"}[watch] : null)
-    || (hasPrediction ? (confident ? top[0].text_tr : `(${top[0].text_tr}?)`)
-      : (running ? (mode === "continuous" ? "İşaret bekleniyor" : "Kayda hazır") : "Hazır"));
-  const signFrames = result?.sign_frames ? result.sign_frames[1] - result.sign_frames[0] + 1 : null;
-  const displaySub = hasPrediction
-    ? `AUTSL ${top[0].class_id} · ${signFrames ? `işaret ${signFrames}/${result.frames} kare` : `${result.frames} kare`} · model ${Math.round(result.model_ms)} ms`
-    : "226 işaret · RTMW";
-  const resultStatus = hasPrediction ? `Son tahmin ekranda · ${status}` : status;
-  const unavailable = model && !ready
-    ? (model.state === "loading" || model.state === "idle" ? "Model yükleniyor…" : (model.message || "Model hazır değil."))
-    : (!health ? "" : (!model ? "Model bu sunucuda yok." : ""));
+  const framingBad = framing && framing.ok === false;
+  const busy = clipState === "processing" || watch === "reading";
+  const watchPill = {
+    waiting: <span className="pill"><span className="dot"/> İşaret bekleniyor</span>,
+    signing: <span className="pill good"><span className="dot pulse"/> İşaret algılandı</span>,
+    reading: <span className="pill"><span className="spinner" style={{width:12,height:12,borderWidth:2}}/> Okunuyor</span>
+  }[watch];
+  const unavailable = !model ? "Sunucuya ulaşılamıyor." : !ready ? (model.state === "loading" || model.state === "idle" ? "Model yükleniyor, birazdan hazır olur." : (model.message || "Model hazır değil.")) : "";
+
   return (
-    <div className="live-layout">
-      <section className={`camera-panel ${running ? "running" : ""}`}>
-        <div className="camera-top">
-          <div className="camera-title">
-            <strong>SIGNTURK Kamera</strong>
-            <div className="mode-switch">
-              <button className={mode === "record" ? "active" : ""} onClick={() => chooseMode("record")} disabled={clipState !== "idle"}>Kayıt</button>
-              <button className={mode === "continuous" ? "active" : ""} onClick={() => chooseMode("continuous")}
-                disabled={!canContinuous || clipState !== "idle"}
-                title={canContinuous ? "Düğmesiz: her işaret kendiliğinden okunur" : "Düğmesiz mod GPU ister"}>Sürekli</button>
+    <div className="live">
+      <div className="live-main">
+        <section className="card stage-card">
+          <div className="stage-bar">
+            <div className="seg" role="tablist" aria-label="Çeviri modu">
+              <button className={mode === "record" ? "active" : ""} onClick={() => chooseMode("record")} disabled={clipState !== "idle"}><Icon name="Video" size={16}/> Kayıt</button>
+              <button className={mode === "continuous" ? "active" : ""} onClick={() => chooseMode("continuous")} disabled={!canContinuous || clipState !== "idle"}
+                title={canContinuous ? "Düğmesiz: her işaret kendiliğinden okunur" : "Düğmesiz mod GPU ister"}><Icon name="Hand" size={16}/> Sürekli</button>
+            </div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <button className="icon-btn" onClick={() => setMirror(v => !v)} title="Önizlemeyi aynala" aria-label="Önizlemeyi aynala"><Icon name="FlipHorizontal2"/></button>
+              <button className="icon-btn" onClick={() => setSpeech(v => !v)} title={speech ? "Sesli okumayı kapat" : "Sesli okumayı aç"} aria-label="Sesli okuma"><Icon name={speech ? "Volume2" : "VolumeX"}/></button>
+              <select className="select" style={{width:190,minHeight:38}} value={deviceId} onChange={e => setDeviceId(e.target.value)} disabled={running} aria-label="Kamera">
+                <option value="">Varsayılan kamera</option>
+                {devices.map(d => <option value={d.deviceId} key={d.deviceId}>{d.label || "Kamera"}</option>)}
+              </select>
             </div>
           </div>
-          <div className="camera-meta">
-            <span className={`dark-chip ${running ? "ok" : ""}`}><Icon name={running ? "Wifi" : "WifiOff"} size={14}/> {running ? "Açık" : "Kapalı"}</span>
-            <span className={`dark-chip ${mode === "continuous" && watch === "signing" ? "ok" : ""}`}><Icon name="Layers" size={14}/> {mode === "continuous" ? (WATCH_LABELS[watch] || "Kapalı") : `${clipProgress.processed}/${clipFrames}`}</span>
-          </div>
-        </div>
-        <div className="video-wrap">
-          <video ref={videoRef} className={mirrorPreview ? "mirror" : ""} playsInline muted />
-          {!running && !starting && (
-            <div className="camera-empty">
-              <div>
-                <Icon name="Camera" size={38}/>
-                <h3>Kamera bekliyor</h3>
-                <p>{mode === "continuous"
-                  ? "Başlattıktan sonra işaret yapın ve her işaretten sonra ellerinizi indirin."
-                  : "Başlattıktan sonra her işareti \"İşareti kaydet\" ile ayrı kaydedin."}</p>
+          <div className={`stage ${running ? "" : "off"}`} style={{aspectRatio:aspect}}>
+            <video ref={videoRef} className={mirror ? "mirror" : ""} playsInline muted/>
+            {running && <FramingGuide ok={framing ? framing.ok : null}/>}
+            {running && (
+              <div className="stage-status">
+                {framing && (framing.ok
+                  ? <span className="pill good"><Icon name="Check" size={14}/> Kadraj uygun</span>
+                  : <span className="pill warn"><Icon name="TriangleAlert" size={14}/> {framing.hint}</span>)}
+                {mode === "continuous" && watchPill}
+                {mode === "continuous" && autoApprove && <span className="pill"><Icon name="CheckCheck" size={14}/> Otomatik onay</span>}
               </div>
+            )}
+            {clipState === "recording" && <div className="rec-dot"><span className="dot pulse"/> Kayıt</div>}
+            {clipState === "recording" && <div className="rec-bar"><span style={{width:`${Math.min(100, sent / clipFrames * 100)}%`}}/></div>}
+            {clipState === "countdown" && <div className="countdown">{countdown}</div>}
+            {!running && (
+              <div className="stage-off">
+                <div>
+                  <Icon name="Camera" size={40}/>
+                  <h3>Kamera kapalı</h3>
+                  <p>{mode === "continuous"
+                    ? "Başlatınca işaret yapın ve her işaretten sonra ellerinizi indirin; işaretler kendiliğinden okunur."
+                    : "Başlatınca \"İşareti kaydet\"e basın; 3-2-1'den sonra dört saniye içinde işareti yapın."}</p>
+                  <button className="btn primary lg" onClick={startLive} disabled={starting || !ready}>
+                    {starting ? <span className="spinner"/> : <Icon name="Play"/>} {starting ? "Açılıyor" : "Kamerayı başlat"}</button>
+                </div>
+              </div>
+            )}
+          </div>
+          {running && (
+            <div className="stage-controls">
+              {mode === "record" ? (
+                <button className="btn primary lg" onClick={recordSign} disabled={clipState !== "idle"}>
+                  {clipState === "processing" ? <span className="spinner"/> : <Icon name="Circle"/>}
+                  {clipState === "idle" ? "İşareti kaydet" : clipState === "processing" ? "Okunuyor" : "Kaydediliyor"}
+                  {clipState === "idle" && <span className="kbd">Boşluk</span>}
+                </button>
+              ) : (
+                <button className={`btn lg ${autoApprove ? "primary" : ""}`} onClick={toggleAutoApprove}
+                  title="Açıkken emin olunan sonuç onay beklemeden cümleye girer; Geri al ile silinir">
+                  <Icon name="CheckCheck"/> Otomatik onay {autoApprove ? "açık" : "kapalı"}
+                </button>
+              )}
+              <span className="spacer"/>
+              <button className="btn lg" onClick={stopLive}><Icon name="Square"/> Durdur</button>
             </div>
           )}
-          {clipState === "countdown" && <div className="countdown">{countdown}</div>}
-          <div className="scan-line" />
-        </div>
-        <div className="camera-controls">
-          <div className="control-left">
-            {!running ? (
-              <button className="btn green" onClick={startLive} disabled={starting || !ready}><Icon name="Play"/> {starting ? "Açılıyor" : "Başlat"}</button>
-            ) : (
-              <button className="btn red" onClick={stopLive}><Icon name="Square"/> Durdur</button>
-            )}
-            {running && mode === "record" && (
-              <button className="btn primary" onClick={recordSign} disabled={clipState !== "idle"}><Icon name="Video"/> İşareti kaydet</button>
-            )}
-            {mode === "continuous" && (
-              <button className={`btn ${autoApprove ? "primary" : ""}`} onClick={toggleAutoApprove}
-                title="Açıkken eşikleri geçen tahmin onay beklemeden cümleye girer; Geri al ile silinir">
-                <Icon name="CheckCheck"/> Otomatik onay {autoApprove ? "açık" : "kapalı"}
-              </button>
-            )}
-            <button className="btn" onClick={() => setMirrorPreview(v => !v)}><Icon name="RefreshCw"/> Önizleme</button>
+          {(error || unavailable) && <div className="note bad" style={{marginTop:12}}><Icon name="CircleAlert" size={18}/>{error || unavailable}</div>}
+          {running && framingBad && (
+            <div className="note warn" style={{marginTop:12}}><Icon name="Lightbulb" size={18}/>
+              <div>Model, belden yukarısı ve elleri görünen kayıtlarla eğitildi. Kameradan biraz uzaklaşın ya da kamerayı aşağı eğin; çerçeve yeşile dönünce doğruluk en yüksektir.</div></div>
+          )}
+        </section>
+        <section className="card sentence-card">
+          <div className="result-label" style={{minWidth:60}}>Cümle</div>
+          {words.length ? <div className="sentence-words">{words.map((w, i) => <span className="word-chip" key={`${w}-${i}`}>{w}</span>)}</div> : null}
+          <div className={`sentence-text ${sentence ? "" : "empty-text"}`}>{sentence || (words.length ? "Cümle için bir kelime daha onaylayın." : "Onayladığınız kelimeler burada cümleye dönüşür.")}</div>
+          <div style={{display:"flex",gap:6}}>
+            <button className="icon-btn" onClick={() => speak(sentence || words.join(" "), true)} disabled={!words.length} title="Seslendir" aria-label="Seslendir"><Icon name="Volume2"/></button>
+            <button className="icon-btn" onClick={undo} disabled={!words.length || !running} title="Son kelimeyi geri al" aria-label="Geri al"><Icon name="Undo2"/></button>
+            <button className="icon-btn" onClick={clearSentence} disabled={!words.length || !running} title="Cümleyi temizle" aria-label="Temizle"><Icon name="Trash2"/></button>
           </div>
-          <div className="control-right">
-            <button className="btn" onClick={() => setSpeech(v => !v)}><Icon name={speech ? "Volume2" : "VolumeX"}/> Ses</button>
-            <select className="select" style={{width:220}} value={deviceId} onChange={e => setDeviceId(e.target.value)} disabled={running}>
-              <option value="">Varsayılan kamera</option>
-              {devices.map(d => <option value={d.deviceId} key={d.deviceId}>{d.label || "Kamera"}</option>)}
-            </select>
-          </div>
-        </div>
-      </section>
-      <aside className="grid result-panel" style={{gap:16}}>
-        {error && <div className="alert bad">{error}</div>}
-        {unavailable && <div className="alert warn">{unavailable}</div>}
-        <section className="panel">
-          <div className="panel-head"><div><h3>Anlık Tahmin</h3><span>{resultStatus}</span></div><span className={`chip ${confident ? "ok" : "warn"}`}>{confPct}%</span></div>
-          <div className="panel-body">
-            {result?.feedback && <div className="alert warn" style={{margin:0}}>{result.feedback}</div>}
-            <div className="prediction">
+        </section>
+      </div>
+
+      <aside className="card result-card" aria-live="polite">
+        <div className="result">
+          {busy ? (
+            <div className="placeholder" style={{placeItems:"center",padding:"30px 0"}}><span className="spinner" style={{width:28,height:28,color:"var(--brand)"}}/>İşaret okunuyor</div>
+          ) : result?.error ? (
+            <div className="note warn"><Icon name="TriangleAlert" size={18}/>{result.error}</div>
+          ) : best ? (
+            <>
               <div>
-                <div className="prediction-label">{displayLabel}</div>
-                <div className="prediction-sub">{displaySub}</div>
+                <div className="result-label">{approved ? "Cümleye eklendi" : confident ? "Tanınan işaret" : "Emin değilim"}</div>
+                <div className={`result-word ${confident ? "" : "unsure"}`}>{approved ? (words[words.length - 1] || best.text_tr) : best.text_tr}</div>
+                <div className="result-meta" style={{marginTop:8}}>
+                  <span className={`pill ${confident ? "good" : "warn"}`}>{percent(best.confidence)} güven</span>
+                  <button className="link-btn" onClick={() => setHowTo({gloss:best.gloss, text:best.text_tr})}><Icon name="CirclePlay" size={16}/> Nasıl yapılır?</button>
+                </div>
               </div>
-              <div>
-                <div className="confidence-row"><span className="mono" style={{fontSize:12,width:38}}>{confPct}%</span><div className="bar"><span style={{width:`${confPct}%`}} /></div></div>
-                <div className="confidence-row"><span className="mono" style={{fontSize:12,width:38}}>{progressPct}%</span><div className="bar"><span style={{width:`${progressPct}%`,background:"linear-gradient(90deg,#2563eb,#16a394)"}} /></div></div>
-              </div>
+              {result.feedback && <div className="note warn"><Icon name="Lightbulb" size={18}/>{result.feedback}</div>}
+              {pending && confident && !approved && (
+                <div className="result-actions">
+                  <button className="btn good lg" onClick={() => approve()}><Icon name="Check"/> Doğru</button>
+                  <button className="btn bad lg" onClick={reject}><Icon name="X"/> Yanlış</button>
+                </div>
+              )}
+              {!confident && !approved && (
+                <div className="choices">
+                  <div className="muted" style={{fontSize:13.5}}>Hangisini yaptınız?</div>
+                  {top.map(p => (
+                    <button className="choice" key={p.gloss} onClick={() => approve(p.gloss)} disabled={!running}>
+                      <strong>{p.text_tr}</strong><span className="muted">{percent(p.confidence)}</span><Icon name="Plus" size={16}/>
+                    </button>
+                  ))}
+                  <button className="btn ghost sm" onClick={reject} disabled={!running}>Hiçbiri</button>
+                </div>
+              )}
+              {confident && !approved && top.length > 1 && (
+                <div className="alt-row">Ya da: {top.slice(1).map(p => <button key={p.gloss} className="link-btn" onClick={() => approve(p.gloss)} disabled={!running}>{p.text_tr}</button>)}</div>
+              )}
+            </>
+          ) : (
+            <div className="placeholder">
+              <div className="result-label">Sonuç</div>
+              {mode === "continuous" ? (
+                <ol><li>Kameranın önünde bir işaret yapın.</li><li>Ellerinizi indirip bir an bekleyin.</li><li>Tanınan işaret burada görünür.</li></ol>
+              ) : (
+                <ol><li>"İşareti kaydet"e basın ya da Boşluk'a dokunun.</li><li>3-2-1'den sonra işareti yapın ve ellerinizi indirin.</li><li>Sonucu Doğru ya da Yanlış ile onaylayın.</li></ol>
+              )}
+              <div className="muted" style={{fontSize:13}}>Kısayollar: Enter doğru, Esc yanlış.</div>
             </div>
-            {pending && running && (
-              <div className="transcript-item" style={{marginTop:14,alignItems:"center"}}>
-                <div><strong>{pending.text || pending.word}</strong><span style={{display:"block",color:"var(--muted)",fontSize:12}}>Onay bekliyor</span></div>
-                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  <button className="btn green" onClick={approveWord}><Icon name="Check"/> Doğru</button>
-                  <button className="btn red" onClick={rejectWord}><Icon name="X"/> Yanlış</button>
-                </div>
-              </div>
-            )}
+          )}
+        </div>
+        {recent.length > 0 && (
+          <div className="recent">
+            <div className="result-label">Son tahminler</div>
+            <div className="recent-list">
+              {recent.map((r, i) => <div className="recent-item" key={i}><span>{r.text}</span><span className={`pill ${r.sure ? "good" : ""}`}>{percent(r.conf)}</span></div>)}
+            </div>
           </div>
-        </section>
-        <section className="panel">
-          <div className="panel-head"><div><h3>Cümle Şeridi</h3><span>{sentenceWords.length} onaylı kelime</span></div></div>
-          <div className="panel-body">
-            {sentenceWords.length ? (
-              <>
-                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
-                  {sentenceWords.map((w,i) => <span className="chip ok" key={`${w}-${i}`}>{w}</span>)}
-                </div>
-                <div className="prediction-label" style={{fontSize:20,lineHeight:1.35}}>{sentence || "-"}</div>
-                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
-                  <button className="btn" onClick={undoWord}><Icon name="Undo2"/> Geri al</button>
-                  <button className="btn" onClick={resetSentence}><Icon name="Trash2"/> Temizle</button>
-                </div>
-              </>
-            ) : <div className="empty">Henüz onaylanan kelime yok.</div>}
-          </div>
-        </section>
-        <section className="panel">
-          <div className="panel-head"><div><h3>En İyi Tahminler</h3><span>Doğru olanı seçerek onaylayın</span></div></div>
-          <div className="panel-body">
-            {top.length ? (
-              <div className="top-list">
-                {top.map((p,i) => (
-                  <button className="top-row" key={p.gloss} onClick={() => approveGloss(p.gloss)} disabled={!running} title="Bu işareti onayla">
-                    <div className="rank">{i+1}</div>
-                    <div><strong>{p.text_tr}</strong><span>AUTSL {p.class_id}</span></div>
-                    <strong>{percent(p.confidence)}</strong>
-                  </button>
-                ))}
-              </div>
-            ) : <div className="empty">Kaydedilen işaretin ilk üç tahmini burada görünür.</div>}
-          </div>
-        </section>
-        <section className="panel">
-          <div className="panel-head"><div><h3>Oturum</h3><span>Son tahminler</span></div></div>
-          <div className="panel-body">
-            {recent.length ? (
-              <div className="transcript">{recent.map((r,i) => <div className="transcript-item" key={i}><div><strong>{r.label}</strong><span style={{display:"block",color:"var(--muted)",fontSize:12}}>{r.at}</span></div><span className="chip ok">{percent(r.conf)}</span></div>)}</div>
-            ) : <div className="empty">Henüz tahmin yok.</div>}
-          </div>
-        </section>
+        )}
       </aside>
-      <canvas ref={canvasRef} style={{display:"none"}} />
+      <canvas ref={canvasRef} style={{display:"none"}}/>
+      {howTo && <HowToModal sign={howTo} onClose={() => setHowTo(null)}/>}
     </div>
   );
 }
 
 function DictionaryPage(){
   const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [narrow, setNarrow] = useState(() => window.matchMedia("(max-width:1080px)").matches);
   useEffect(() => {
-    apiFetch(API.endpoints.dictionary).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => setRows([]));
+    apiFetch(API.endpoints.dictionary).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => setRows([])).finally(() => setLoading(false));
+    const query = window.matchMedia("(max-width:1080px)");
+    const onChange = () => setNarrow(query.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
   }, []);
-  const filtered = rows.filter(r => `${r.text || ""} ${r.tr || ""} ${r.en || ""} ${r.class_id ?? ""}`.toLocaleLowerCase("tr-TR").includes(search.toLocaleLowerCase("tr-TR")));
+  const needle = search.trim().toLocaleLowerCase("tr-TR");
+  const filtered = rows
+    .filter(r => !needle || `${r.text} ${r.tr} ${r.en || ""} ${r.class_id}`.toLocaleLowerCase("tr-TR").includes(needle))
+    .sort((a, b) => a.text.localeCompare(b.text, "tr"));
+  const pick = (r) => setSelected({gloss:r.animation_key || r.tr, text:r.text, en:r.en, id:r.class_id, avatar:!!r.animation_key});
   return (
-    <section className="panel">
-      <div className="panel-head"><div><h3>SIGNTURK Sözlük</h3><span>{filtered.length} işaret</span></div><div className="field" style={{width:280}}><input className="input" placeholder="Ara" value={search} onChange={e => setSearch(e.target.value)} /></div></div>
-      <div className="table-wrap">
-        <table><thead><tr><th>AUTSL</th><th>Türkçe</th><th>İngilizce</th><th>Avatar</th></tr></thead>
-          <tbody>{filtered.map(r => (
-            <tr key={r.class_id}>
-              <td className="mono">{r.class_id}</td>
-              <td>{r.text || r.tr}</td>
-              <td>{r.en || "-"}</td>
-              <td className="mono">{r.animation_key || "-"}</td>
-            </tr>
-          ))}</tbody>
-        </table>
+    <>
+      <div className="page-head">
+        <div><h1>Sözlük</h1><p>SignTurk'ün tanıdığı {rows.length || 226} işaret. Bir işarete dokunun, avatar nasıl yapıldığını göstersin.</p></div>
+        <div className="search" style={{width:"min(340px,100%)"}}><Icon name="Search" size={17}/>
+          <input className="input" placeholder="Türkçe ya da İngilizce ara" value={search} onChange={e => setSearch(e.target.value)} aria-label="İşaret ara"/></div>
       </div>
-    </section>
+      <div className="dict">
+        <div>
+          {loading ? <div className="empty"><span className="spinner"/></div> : filtered.length ? (
+            <div className="dict-grid">
+              {filtered.map(r => (
+                <button key={r.class_id} className={`card-button ${selected?.id === r.class_id ? "active" : ""}`} onClick={() => pick(r)}>
+                  <strong>{r.text}</strong><span>{r.en || "-"}</span>
+                </button>
+              ))}
+            </div>
+          ) : <div className="card empty">"{search}" için işaret bulunamadı.</div>}
+        </div>
+        {!narrow && (
+          <aside className="card dict-side">
+            {selected ? (
+              <>
+                <AvatarPlayer word={selected.avatar ? selected.gloss : ""} label={selected.text}/>
+                <div className="card-body">
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10}}>
+                    <h2 style={{margin:0,fontSize:24}}>{selected.text}</h2><span className="pill">AUTSL {selected.id}</span>
+                  </div>
+                  <div className="muted" style={{marginTop:4}}>{selected.en || "-"}</div>
+                  {!selected.avatar && <div className="note warn" style={{marginTop:12}}>Bu işaretin animasyonu yok.</div>}
+                </div>
+              </>
+            ) : <div className="empty" style={{padding:"60px 20px"}}><Icon name="Hand" size={32}/><div style={{marginTop:10}}>Animasyonunu görmek için bir işaret seçin.</div></div>}
+          </aside>
+        )}
+      </div>
+      {narrow && selected && <HowToModal sign={selected} onClose={() => setSelected(null)}/>}
+    </>
   );
 }
 
@@ -1397,229 +1114,171 @@ function HistoryPage(){
   useEffect(() => {
     apiFetch(API.endpoints.history).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => setRows([])).finally(() => setLoading(false));
   }, []);
+  const groups = [];
+  for (const row of rows){
+    const label = row.created_at ? dayLabel(row.created_at) : "Tarihsiz";
+    if (!groups.length || groups[groups.length - 1].label !== label) groups.push({label, rows:[]});
+    groups[groups.length - 1].rows.push(row);
+  }
   return (
-    <section className="panel">
-      <div className="panel-head"><div><h3>Geçmiş</h3><span>{rows.length} onaylanan kelime</span></div></div>
-      {loading ? <div className="empty">Yükleniyor.</div> : rows.length === 0 ? <div className="empty">Kayıt bulunamadı.</div> : (
-        <div className="table-wrap">
-          <table><thead><tr><th>Zaman</th><th>Mod</th><th>Sonuç</th><th>Güven</th><th>Oturum</th></tr></thead>
-            <tbody>{rows.map((r,i) => <tr key={r.id ?? i}><td>{r.created_at ? new Date(r.created_at).toLocaleString("tr-TR") : "-"}</td><td>{r.mode || "-"}</td><td>{r.text || r.result || "-"}</td><td>{r.confidence || "-"}</td><td className="mono">{r.session_id || "-"}</td></tr>)}</tbody>
-          </table>
+    <>
+      <div className="page-head"><div><h1>Geçmiş</h1><p>Onayladığınız son {rows.length} kelime.</p></div></div>
+      {loading ? <div className="card empty"><span className="spinner"/></div> : !rows.length ? (
+        <div className="card empty">Henüz onaylanan kelime yok. Çeviri sayfasında bir işaret onaylayınca burada görünür.</div>
+      ) : (
+        <div className="grid" style={{gap:16}}>
+          {groups.map(g => (
+            <section className="card" key={g.label}>
+              <div className="card-head"><h3>{g.label}</h3><span className="muted" style={{fontSize:13}}>{g.rows.length} kelime</span></div>
+              <div className="table-wrap" style={{marginTop:8}}>
+                <table><tbody>{g.rows.map((r, i) => (
+                  <tr key={r.id ?? i}><td style={{width:90}} className="muted">{formatTime(r.created_at)}</td><td><strong>{r.text || r.result}</strong></td>
+                    <td style={{textAlign:"right"}}>{trPercent(r.confidence) !== "-" ? <span className="pill">{trPercent(r.confidence)}</span> : <span className="muted">-</span>}</td></tr>
+                ))}</tbody></table>
+              </div>
+            </section>
+          ))}
         </div>
       )}
-    </section>
+    </>
   );
 }
 
 function SettingsPage(){
   const [settings, setSettings] = useState({tts_enabled:false, speech_rate:1, avatar_speed:1});
-  const [saved, setSaved] = useState(false);
+  const [toast, setToast] = useState("");
   const [error, setError] = useState("");
-  useEffect(() => {
-    apiFetch(API.endpoints.settings).then(d => setSettings(prev => ({...prev, ...d}))).catch(() => {});
-  }, []);
+  useEffect(() => { apiFetch(API.endpoints.settings).then(d => setSettings(prev => ({...prev, ...d}))).catch(() => {}); }, []);
   const save = async () => {
-    setSaved(false); setError("");
+    setError("");
     try{
       await apiFetch(API.endpoints.settings, {method:"POST", body:JSON.stringify(settings)});
-      setSaved(true);
-      setTimeout(() => setSaved(false), 1800);
+      setToast("Ayarlar kaydedildi");
+      setTimeout(() => setToast(""), 1800);
     }catch(err){ setError(err.message || "Ayarlar kaydedilemedi"); }
   };
-  const ToggleRow = ({k,title,sub}) => (
-    <div className="settings-row">
-      <div><strong>{title}</strong><span>{sub}</span></div>
-      <button className={`toggle ${settings[k] ? "on" : ""}`} onClick={() => setSettings({...settings, [k]:!settings[k]})}><span /></button>
-    </div>
-  );
   return (
-    <div className="grid cols-2">
-      <section className="panel">
-        <div className="panel-head"><div><h3>Tercihler</h3><span>SIGNTURK panel ayarları</span></div><button className="btn primary" onClick={save}><Icon name="Save"/> Kaydet</button></div>
-        <div className="panel-body">
-          {saved && <div className="alert ok">Ayarlar kaydedildi.</div>}
-          {error && <div className="alert bad">{error}</div>}
-          <ToggleRow k="tts_enabled" title="Sesli okuma" sub="Onaylanan kelimeleri ve cümleyi tarayıcının Türkçe sesiyle okur" />
-        </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head"><div><h3>Hız</h3><span>Konuşma ve avatar oynatma</span></div></div>
-        <div className="panel-body grid" style={{gap:14}}>
-          <div className="field"><label>Konuşma hızı</label><input className="input" type="number" step="0.1" min="0.5" max="2" value={settings.speech_rate || 1} onChange={e => setSettings({...settings, speech_rate:Number(e.target.value)})} /></div>
-          <div className="field"><label>Avatar hızı</label><input className="input" type="number" step="0.1" min="0.25" max="3" value={settings.avatar_speed || 1} onChange={e => setSettings({...settings, avatar_speed:Number(e.target.value)})} /></div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-// Avatar playback quality, reviewed sign by sign: good → fair → poor (slugs).
-// Words missing from the list are appended alphabetically.
-const SIGN_QUALITY_ORDER = [
-  // ── good ──
-  'acikmak','akraba','agabey','akilli','anahtar','ayna','ayni','bayram','bardak','bayrak',
-  'bekar','cirkin','corba','dakika','devirmek','emek','et','fotograf','getirmek','gol',
-  'gostermek','gulmek','hakli','hali','hayir','hep','hic','hoscakal','isik','itmek',
-  'kapi','kaza','kemer','kim','koku','kolonya','makas','musluk','nerede','ocak',
-  'onlar','orman','pantolon','pazartesi','piknik','saat','salca','semsiye','sevmek','siz',
-  'terazi','terzi','var','yakin','yol','zaman',
-  // ── fair ──
-  'acele','agac','agir','akilsiz','alisveris','anne','arkadas','bakmak','bebek','bilgi_vermek',
-  'carsamba','cocuk','cuma','devlet','dolu','dusman','ezberlemek','fil','gecmis','hafif',
-  'hastane','hayirli_olsun','hayvan','hediye','helal','igne','kacmak','kalorifer','komur','leke',
-  'maas','melek','mendil','merdiven','nasil','nine','ogretmen','olmaz','olur','oruc',
-  'pastirma','patates','pencere','rica_etmek','savas','selam','sen','ses','seytan','sinir',
-  'soz','tamam','tarak','tatil','telefon','tornavida','tuvalet','un','uzak','yalniz',
-  'yapmak','yarabandi','yarin','yasak','yemek_pisirmek','yildiz','yorgun','yumurta',
-  // ── poor ──
-  'abla','afiyet_olsun','aglamak','aile','ataturk','ayakkabi','baba','bahce','bal','beklemek',
-  'ben','benzin','beraber','biz','calismak','catal','caydanlik','cekic','cumartesi','cuzdan',
-  'dede','degistirmek','doktor','dugun','dun','duvar','eczane','eldiven','emekli','erkek',
-  'ev','evet','evli','futbol','gomlek','gormek','hasta','hata','havlu','icmek',
-  'ilac','ilgilenmemek','kahvalti','kalem','kardes','kavsak','keske','kimlik','kira','kitap',
-  'kiyma','kiz','kopek','kopru','kotu','kucak','masa','masallah','memnun_olmak','misafir',
-  'mudur','neden','oda','odun','okul','olimpiyat','ozur_dilemek','pamuk','para','pazar',
-  'persembe','polis','psikoloji','sabun','sali','sampiyon','sapka','seker','senet','serbest',
-  'soylemek','sut','tarih','tatli','tavan','tehlike','tesekkur','turkiye','turuncu','vergi',
-  'yanlis','yardim','yastik','yatak','yavas','yemek','yok','zor',
-];
-const SIGN_RANK = SIGN_QUALITY_ORDER.reduce((m,w,i) => { m[w]=i; return m; }, {});
-function signRank(w){ const r = SIGN_RANK[String(w).toLowerCase()]; return r == null ? 100000 : r; }
-// Quality tier by list position: good (0-55), fair (56-123), poor (124-221), other (unranked)
-function signTier(w){ const r = signRank(w); return r < 56 ? 'iyi' : r < 124 ? 'orta' : r < 222 ? 'kotu' : 'diger'; }
-
-function Avatar3DPage(){
-  const [words, setWords] = useState([]);
-  const [labels, setLabels] = useState({});
-  const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState("");
-  const iframeRef = useRef(null);
-  const avatarSpeedRef = useRef(1);
-  useEffect(() => {
-    apiFetch(API.endpoints.signs).then(d => { setWords(d.words || []); setLabels(d.labels || {}); }).catch(() => setWords([]));
-    apiFetch(API.endpoints.settings).then(s => {
-      avatarSpeedRef.current = Number(s?.avatar_speed) || 1;
-      sendSpeed();
-    }).catch(() => {});
-  }, []);
-  const sendSpeed = () => {
-    iframeRef.current?.contentWindow?.postMessage({type:"set_speed", value:avatarSpeedRef.current}, window.location.origin);
-  };
-  const play = (word) => {
-    setSelected(word);
-    // avatar3d.html only reacts to messages of type "play_sign"
-    iframeRef.current?.contentWindow?.postMessage({type:"play_sign", word, label:labels[word] || word}, window.location.origin);
-  };
-  // Ordered by playback quality (good → fair → poor), not alphabetically
-  const filtered = words
-    .filter(w => `${w} ${labels[w] || ""}`.toLocaleLowerCase("tr-TR").includes(search.toLocaleLowerCase("tr-TR")))
-    .sort((a,b) => signRank(a) - signRank(b) || a.localeCompare(b));
-  return (
-    <div className="avatar-grid">
-      <iframe ref={iframeRef} className="avatar-frame" src={API.endpoints.avatar3d} title="SIGNTURK 3D Animasyon" onLoad={sendSpeed} />
-      <section className="panel">
-        <div className="panel-head"><div><h3>Animasyon Sözlüğü</h3><span>{filtered.length} kelime</span></div></div>
-        <div className="panel-body">
-          <div className="field" style={{marginBottom:12}}><input className="input" placeholder="Kelime ara" value={search} onChange={e => setSearch(e.target.value)} /></div>
-          <div className="word-list">
-            {filtered.map((w, i) => {
-              // Divider between the "good" block and the rest
-              const showDiv = i > 0 && signTier(filtered[i-1]) === 'iyi' && signTier(w) === 'orta';
-              return (
-                <React.Fragment key={w}>
-                  {showDiv && <div style={{height:3,background:'#c9a96e',borderRadius:3,margin:'14px 2px',boxShadow:'0 0 8px rgba(201,169,110,.5)'}}/>}
-                  <button className={"word-btn" + (selected===w ? " active" : "")} onClick={() => play(w)}><span>{labels[w] || w}</span><Icon name="Play" size={15}/></button>
-                </React.Fragment>
-              );
-            })}
-            {!filtered.length && <div className="empty">Animasyon kelimesi bulunamadı.</div>}
+    <>
+      <div className="page-head"><div><h1>Ayarlar</h1><p>Sesli okuma ve avatar oynatma tercihleri.</p></div><button className="btn primary" onClick={save}><Icon name="Save"/> Kaydet</button></div>
+      {error && <div className="note bad" style={{marginBottom:16}}><Icon name="CircleAlert" size={18}/>{error}</div>}
+      <div className="grid cols-2">
+        <section className="card">
+          <div className="card-head"><div><h2>Ses</h2><p>Onaylanan kelimeler ve cümle tarayıcının Türkçe sesiyle okunur.</p></div></div>
+          <div className="card-body">
+            <div className="settings-row"><div><strong>Sesli okuma</strong><span>Çeviri sayfasında başlangıçta açık olsun</span></div>
+              <button className={`toggle ${settings.tts_enabled ? "on" : ""}`} onClick={() => setSettings({...settings, tts_enabled:!settings.tts_enabled})} aria-label="Sesli okuma" aria-pressed={!!settings.tts_enabled}><span/></button></div>
+            <div className="settings-row" style={{display:"grid",gap:8}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}><strong>Konuşma hızı</strong><span className="mono">{Number(settings.speech_rate || 1).toFixed(1)}×</span></div>
+              <input type="range" min="0.5" max="2" step="0.1" value={settings.speech_rate || 1} onChange={e => setSettings({...settings, speech_rate:Number(e.target.value)})} aria-label="Konuşma hızı"/>
+            </div>
           </div>
-        </div>
-      </section>
-    </div>
+        </section>
+        <section className="card">
+          <div className="card-head"><div><h2>Avatar</h2><p>Sözlük ve "Nasıl yapılır?" animasyonlarının hızı.</p></div></div>
+          <div className="card-body">
+            <div className="settings-row" style={{display:"grid",gap:8}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}><strong>Oynatma hızı</strong><span className="mono">{Number(settings.avatar_speed || 1).toFixed(2)}×</span></div>
+              <input type="range" min="0.25" max="3" step="0.05" value={settings.avatar_speed || 1} onChange={e => setSettings({...settings, avatar_speed:Number(e.target.value)})} aria-label="Avatar hızı"/>
+            </div>
+          </div>
+        </section>
+      </div>
+      {toast && <div className="toast">{toast}</div>}
+    </>
   );
 }
 
-function AdminOverview(){
+function AdminPage({tab, navigate, model}){
+  return (
+    <>
+      <div className="page-head">
+        <div><h1>Yönetim</h1><p>Hesaplar, model ve sunucu kayıtları.</p></div>
+        <div className="seg">{ADMIN_TABS.map(t => <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => navigate(t.id)}>{t.label}</button>)}</div>
+      </div>
+      {tab === "admin/users" ? <AdminUsers/> : tab === "admin/model" ? <AdminModel/> : tab === "admin/logs" ? <AdminLogs/> : <AdminOverview model={model}/>}
+    </>
+  );
+}
+
+function AdminOverview({model}){
   const [ov, setOv] = useState(null);
   useEffect(() => { apiFetch(API.endpoints.adminOverview).then(setOv).catch(() => {}); }, []);
-  return (
-    <div className="grid cols-4">
-      <Metric label="Aktif Hesap" value={ov?.active_users ?? "-"} sub={`toplam ${ov?.total_users ?? "-"}`} icon="Users" ok/>
-      <Metric label="Çeviri" value={ov?.translations ?? "-"} sub="toplam kayıt" icon="Languages" ok/>
-      <Metric label="Ortalama Güven" value={ov?.avg_confidence ? `${ov.avg_confidence}%` : "-"} sub="onaylanan kelimeler" icon="Gauge" ok/>
-      <Metric label="Log" value={ov?.logs ?? "-"} sub="sistem kaydı" icon="ListChecks" ok/>
-    </div>
-  );
+  const stats = [
+    ["Aktif hesap", ov?.active_users ?? "-", `toplam ${ov?.total_users ?? "-"}`],
+    ["Onaylanan kelime", ov?.translations ?? "-", "tüm kullanıcılar"],
+    ["Ortalama güven", ov?.avg_confidence ? trPercent(ov.avg_confidence) : "-", "onaylanan kelimelerde"],
+    ["Model", MODEL_STATES[model?.state] || "-", model?.ready ? `${DEVICE_NAMES[model.device] || "-"} üzerinde` : (model?.message || "")]
+  ];
+  return <div className="grid cols-4">{stats.map(([label, value, sub]) => <section className="card stat" key={label}><div className="label">{label}</div><div className="value">{value}</div><div className="sub">{sub}</div></section>)}</div>;
 }
 
 function AdminUsers(){
   const [rows, setRows] = useState([]);
   useEffect(() => { apiFetch(API.endpoints.adminUsers).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => {}); }, []);
   return (
-    <section className="panel"><div className="panel-head"><div><h3>Kullanıcılar</h3><span>{rows.length} hesap</span></div></div>
-      <div className="table-wrap"><table><thead><tr><th>Ad</th><th>E-posta</th><th>Rol</th><th>Oturum</th></tr></thead><tbody>{rows.map((u,i) => <tr key={u.id || i}><td>{u.name || u.full_name || "-"}</td><td>{u.email}</td><td>{u.role}</td><td>{u.sessions ?? "-"}</td></tr>)}</tbody></table></div>
-    </section>
+    <section className="card"><div className="table-wrap">
+      <table><thead><tr><th>Ad</th><th>E-posta</th><th>Rol</th><th>Durum</th><th>Oturum</th></tr></thead>
+        <tbody>{rows.map((u, i) => <tr key={u.id || i}><td><strong>{u.name || u.full_name || "-"}</strong></td><td>{u.email}</td>
+          <td><span className={`pill ${u.role === "Admin" ? "brand" : ""}`}>{u.role === "Admin" ? "Yönetici" : "Kullanıcı"}</span></td>
+          <td>{u.status === "Active" ? "Etkin" : (u.status || "-")}</td><td>{u.sessions ?? "-"}</td></tr>)}</tbody></table>
+    </div></section>
   );
 }
 
 function AdminModel(){
   const [m, setM] = useState(null);
   useEffect(() => { apiFetch(API.endpoints.adminModel).then(setM).catch(() => {}); }, []);
-  if (!m) return <div className="panel"><div className="empty">Model bilgisi yükleniyor.</div></div>;
+  if (!m) return <div className="card empty"><span className="spinner"/></div>;
   const model = m.model_226 || {};
-  const streams = Object.entries(m.streams || {});
   const ms = value => value != null ? `${value} ms` : "Henüz yok";
   const items = [
-    ["Model", MODEL_STATES[model.state] || "-", model.message || `${model.num_classes ?? 226} işaret`, modelOk(model)],
+    ["Durum", MODEL_STATES[model.state] || "-", model.message || `${model.num_classes ?? 226} işaret`],
     ["Cihaz", DEVICE_NAMES[model.device] || "-", "RTMW ve YOLOX"],
-    ["Kayıt", `${recordSeconds(model)} sn`, `${recordFrames(model)} kare; işaretten ${model.frame_count ?? 32} kare modele gider`],
-    ["Kare süresi", ms(model.avg_frame_ms), "tespit ve poz, kare başına"],
+    ["Düğmesiz mod", model.continuous ? "Açık" : "Kapalı", "kare başına en çok 60 ms"],
+    ["Kayıt", `${Math.round(recordFrames(model) / (model.camera_fps || 12))} sn`, `${recordFrames(model)} kare; kesilen işaretten ${model.frame_count ?? 32} kare`],
+    ["Kare süresi", ms(model.avg_frame_ms), "kişi tespiti ve poz"],
     ["Kişi tespiti", ms(model.avg_detect_ms), `${model.detect_every ?? 1} karede bir`],
     ["Poz", ms(model.avg_pose_ms), "kare başına RTMW"],
-    ["Onay eşiği", percent(m.thresholds?.top1 ?? .7), `ikinciyle fark en az ${percent(m.thresholds?.margin ?? .12)}`],
-    ["Akışlar", streams.length || "-", streams.map(([name, weight]) => `${name} ${weight}`).join(" · ")],
-    ["Animasyon kelimesi", m.landmark_words ?? "-", "landmark dosyası"]
+    ["Onay eşiği", percent(m.thresholds?.top1 ?? .7), `ikinciden en az ${percent(m.thresholds?.margin ?? .12)} önde`],
+    ["Akışlar", Object.keys(m.streams || {}).length || "-", Object.entries(m.streams || {}).map(([name, weight]) => `${name} ${weight}`).join(" · ")],
+    ["Avatar", m.landmark_words ?? "-", "animasyonu olan işaret"]
   ];
-  return (
-    <section className="panel"><div className="panel-head"><div><h3>Model Durumu</h3><span>Pipeline özeti</span></div></div>
-      <div className="panel-body"><div className="grid cols-3">{items.map(([label,value,sub,ok]) => <Metric key={label} label={label} value={String(value)} sub={sub} icon="Cpu" ok={ok !== false}/>)}</div></div>
-    </section>
-  );
+  return <section className="card"><div className="card-body"><div className="kv">{items.map(([k, v, s]) => <div className="kv-item" key={k}><div className="k">{k}</div><div className="v">{String(v)}</div><div className="s">{s}</div></div>)}</div></div></section>;
 }
 
 function AdminLogs(){
   const [rows, setRows] = useState([]);
   useEffect(() => { apiFetch(API.endpoints.adminLogs).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => {}); }, []);
+  const tone = {Success:"good", Warning:"warn", Error:"bad"};
   return (
-    <section className="panel"><div className="panel-head"><div><h3>Loglar</h3><span>{rows.length} kayıt</span></div></div>
-      <div className="table-wrap"><table><thead><tr><th>Zaman</th><th>Seviye</th><th>Mesaj</th><th>Kullanıcı</th></tr></thead><tbody>{rows.map((l,i) => <tr key={l.id || i}><td>{l.timestamp ? new Date(l.timestamp).toLocaleString("tr-TR") : "-"}</td><td>{l.level}</td><td>{l.message}</td><td>{l.user || "-"}</td></tr>)}</tbody></table></div>
-    </section>
+    <section className="card"><div className="table-wrap">
+      <table><thead><tr><th>Zaman</th><th>Seviye</th><th>Kayıt</th><th>Kullanıcı</th></tr></thead>
+        <tbody>{rows.map((l, i) => <tr key={l.id || i}><td className="muted" style={{whiteSpace:"nowrap"}}>{formatTime(l.timestamp, true)}</td>
+          <td><span className={`pill ${tone[l.level] || ""}`}>{l.level}</span></td><td>{l.message}</td><td className="muted">{l.user || "-"}</td></tr>)}</tbody></table>
+    </div></section>
   );
 }
 
 function App(){
-  const [userState, setUserState] = useState(() => {
-    try{
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-      return saved?.access_token ? saved : null;
-    }catch{ return null; }
+  const [user, setUserState] = useState(() => {
+    try{ const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"); return saved?.access_token ? saved : null; }
+    catch{ return null; }
   });
-  const setUser = useCallback((user) => {
-    if (user) localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+  const setUser = useCallback((next) => {
+    if (next) localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     else{
       if (storedToken()) apiFetch(API.endpoints.logout, {method:"POST"}).catch(() => {});
       localStorage.removeItem(STORAGE_KEY);
     }
-    setUserState(user);
+    setUserState(next);
   }, []);
   useEffect(() => {
     const onExpired = () => { localStorage.removeItem(STORAGE_KEY); setUserState(null); };
     window.addEventListener("signturk:logout", onExpired);
     return () => window.removeEventListener("signturk:logout", onExpired);
   }, []);
-  if (!userState) return <AuthScreen onLogin={setUser}/>;
-  return <Shell user={userState} setUser={setUser}/>;
+  if (!user) return <AuthScreen onLogin={setUser}/>;
+  return <Shell user={user} setUser={setUser}/>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);

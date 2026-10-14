@@ -384,6 +384,8 @@ function loadAvatar(url, isObjectURL) {
       document.getElementById('vpStatus').classList.add('playing');
       setAnimStatus('Avatar hazır — kelime seçin','');
       console.log('[Avatar] Bones:', Object.keys(ANIM.avatarBones).length);
+      // A sign asked for while the avatar was still loading plays now
+      if(ANIM.pendingSign){ var pending=ANIM.pendingSign; ANIM.pendingSign=null; selectWord(pending.word, pending.label); }
     });
   }, function(xhr){
     if(xhr.total>0) setLoading('Yükleniyor... %'+Math.round(xhr.loaded/xhr.total*100));
@@ -1288,7 +1290,10 @@ window.addEventListener('message',function(event){
   if(event.origin!==window.location.origin) return;
   var data=event.data;
   if(!data) return;
-  if(data.type==='play_sign'&&data.word) selectWord(String(data.word).trim(), data.label?String(data.label):null);
+  if(data.type==='play_sign'&&data.word){
+    var word=String(data.word).trim(), label=data.label?String(data.label):null;
+    if(ANIM.avatarLoaded) selectWord(word, label); else ANIM.pendingSign={word:word, label:label};
+  }
   if(data.type==='set_speed') setUserSpeed(data.value);
 });
 

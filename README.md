@@ -18,7 +18,8 @@ can play signs back. The interface and API messages are in Turkish.
 - **Turkish sentence engine:** rule-based morphology turns glosses such as
   `ben çay içmek` into `Ben çay içiyorum.`
 - **3D avatar:** 226 recorded landmark sequences replayed on a rigged
-  three.js character, with captions, slow mode and loop.
+  three.js character, with captions, slow mode and loop. The dictionary and
+  every result show with it how a sign is made (**Nasıl yapılır?**).
 - **Accounts:** token login, per-user history and settings, admin pages for
   users, logs and model status.
 - **Storage:** SQLite with no setup, or PostgreSQL through `DATABASE_URL`.
@@ -27,7 +28,7 @@ can play signs back. The interface and API messages are in Turkish.
 
 ## Live recognition
 
-On the **Canlı Çeviri** page signs are read one at a time. In the **Kayıt**
+On the **Çeviri** page signs are read one at a time. In the **Kayıt**
 mode each sign is recorded on its own:
 
 1. The user presses **İşareti kaydet**. After a 3-2-1 countdown the browser
@@ -131,9 +132,9 @@ uvicorn backend:app --port 8000
 ```
 
 Open <http://127.0.0.1:8000>, register or sign in with the admin account, and
-allow camera access on the **Canlı Çeviri** page. The model loads in the
-background when the server starts; the admin **Model Durumu** page shows its
-state.
+allow camera access on the **Çeviri** page. The model loads in the
+background when the server starts; the top bar and the admin
+**Yönetim → Model** tab show its state.
 
 With Docker:
 
