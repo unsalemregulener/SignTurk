@@ -31,8 +31,6 @@ updates:
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: onnxruntime-gpu
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
-      - dependency-name: rtmlib
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       # Only the optional ML grammar layer uses it, and CI cannot exercise that layer.
       - dependency-name: huggingface-hub
         update-types: ["version-update:semver-major"]

@@ -58,12 +58,12 @@ class Extractor:
         self.last_pose_ms = 0.0
 
     def _create_sessions(self, root: Path, settings: dict, device: str) -> None:
-        from rtmlib import RTMPose, YOLOX
+        from .rtm import RTMPose, YOLOX
 
-        self.detector = YOLOX(str(root / settings["detector"]), model_input_size=tuple(settings["detector_input_size"]),
-                              backend="onnxruntime", device=device)
-        self.pose = RTMPose(str(root / settings["pose"]), model_input_size=tuple(settings["pose_input_size"]),
-                            to_openpose=False, backend="onnxruntime", device=device)
+        self.detector = YOLOX(str(root / settings["detector"]), input_size=tuple(settings["detector_input_size"]),
+                              device=device)
+        self.pose = RTMPose(str(root / settings["pose"]), input_size=tuple(settings["pose_input_size"]),
+                            device=device)
 
     def _sessions_on_cuda(self) -> bool:
         return all(tool.session.get_providers()[0] == "CUDAExecutionProvider" for tool in (self.detector, self.pose))
@@ -80,6 +80,6 @@ class Extractor:
             boxes = self.detector(image_bgr)
             self.last_detect_ms = (time.perf_counter() - started) * 1000.0
         started = time.perf_counter()
-        keypoints, scores = self.pose(image_bgr, bboxes=boxes)
+        keypoints, scores = self.pose(image_bgr, boxes)
         self.last_pose_ms = (time.perf_counter() - started) * 1000.0
         return wholebody_to_landmarks(keypoints, scores, frame_rgb.shape, self.keypoint_threshold), boxes

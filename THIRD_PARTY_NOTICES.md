@@ -10,6 +10,7 @@ time or installed with it. They keep their own licenses and terms.
 | --- | --- | --- |
 | three.js r128 | `frontend/three.min.js`, `frontend/GLTFLoader.js`, `frontend/OrbitControls.js` | MIT, Copyright 2010-2021 Three.js Authors |
 | Mixamo character "Ch08" | `frontend/avatar.glb` (textures resized) | Adobe Mixamo terms of use, not the MIT License |
+| YOLOX and RTMPose code adapted from [rtmlib](https://github.com/Tau-J/rtmlib) 0.0.16 | `signturk_runtime/rtm.py` | Apache-2.0, see [LICENSES/rtmlib-Apache-2.0.txt](LICENSES/rtmlib-Apache-2.0.txt); the changes are listed at the top of the file |
 | Landmark sequences derived from AUTSL | `landmarks/*.json` | see [AUTSL](#autsl) |
 | Model metadata derived from AUTSL | `demo_assets_179/`, `research/model_226/` | see [AUTSL](#autsl) |
 
@@ -63,7 +64,6 @@ Docker image.
 | Keras | Apache-2.0 |
 | MediaPipe | Apache-2.0 |
 | ONNX Runtime | MIT |
-| rtmlib | Apache-2.0 |
 | NumPy | BSD-3-Clause |
 | OpenCV (opencv-python, opencv-contrib-python) | Apache-2.0 |
 | SQLAlchemy | MIT |
