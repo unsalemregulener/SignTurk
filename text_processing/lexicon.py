@@ -144,7 +144,7 @@ SIGN_GLOSS_TURKISH: Dict[str, str] = {
     "leke": "leke",
     "maas": "maaş",
     "makas": "makas",
-    "masa": "masa",
+    "masa": "maşa",
     "masallah": "maşallah",
     "melek": "melek",
     "memnun_olmak": "memnun olmak",
