@@ -28,7 +28,7 @@ pydantic[email]==2.11.1
 # ── Config / Secrets ──────────────────────────────────────
 # Loads HF_TOKEN (and any other secrets) from a local .env file so they
 # don't have to be exported every session. The .env file is gitignored.
-python-dotenv==1.0.1
+python-dotenv==1.2.4
 
 # ── Text processing (sentence engine + grammar) ───────────
 # The deterministic rule-based path needs nothing beyond the stdlib and
