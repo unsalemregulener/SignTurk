@@ -1193,6 +1193,7 @@ function LivePage(){
       };
       ws.onerror = () => { setError("WebSocket bağlantısı kurulamadı."); setStatus("Bağlantı hatası"); };
       ws.onclose = (event) => {
+        stopStream();
         setRunning(false);
         setClipState("idle");
         if (event.code === 1008){ setError("Oturum süresi doldu, yeniden giriş yapın."); window.dispatchEvent(new Event("signturk:logout")); }
