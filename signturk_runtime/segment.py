@@ -15,7 +15,10 @@ height that wobbles on a webcam does not stretch the cut.
 The settings were chosen with tools/evaluate_recording.py on AUTSL's
 validation split. RAISED from 0.3 to 0.6 and AWAY from 0.25 to 0.4 cut the
 same frames there; a margin of extra rest around the cut cost accuracy, so
-none is kept.
+none is kept. AWAY is as wide as RAISED because signers do not always come
+back to the rest height they started from: with a narrower band such hands
+never counted as back, and in the hands-free mode the next sign ran into
+this one.
 """
 
 from __future__ import annotations
@@ -30,7 +33,7 @@ LEFT_WRIST, RIGHT_WRIST = 15, 16
 LEFT_SHOULDER, RIGHT_SHOULDER = 11, 12
 
 RAISED = 0.40     # shoulder widths above rest: the hands are signing
-AWAY = 0.25       # shoulder widths above rest: the hands are not back yet
+AWAY = 0.40       # shoulder widths above rest: the hands are not back yet
 MARGIN_SECONDS = 0.0    # extra rest kept on each side of the cut
 MIN_REST = 0.6    # if even the lowest wrist position is higher, the hands never rested
 
@@ -159,6 +162,8 @@ class Segmenter:
             if settled:
                 self.wait_for_rest = False
                 self._forget(last_up + 1)
+            else:
+                self._forget(len(arr) - self.keep)
             return None
         self.signing = last_up >= 0
         if not self.signing:

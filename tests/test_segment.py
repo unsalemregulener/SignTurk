@@ -101,6 +101,17 @@ class SegmenterTests(unittest.TestCase):
         found = self.cuts([REST] * 12 + [0.0] * 120 + [REST] * 24, max_seconds=4.0)
         self.assertEqual(len(found), 1, found)
 
+    def test_a_new_rest_height_still_ends_the_sign(self):
+        lower_rest = [h if h < 1.1 else 1.1 for h in SIGN[12:]]   # back down to 1.1 instead of 1.4
+        found = self.cuts(SIGN[:36] + lower_rest[24:] + lower_rest)
+        self.assertEqual(len(found), 2, found)
+
+    def test_the_stream_stays_short_while_the_hands_never_settle(self):
+        segmenter = Segmenter(FPS, max_seconds=4.0)
+        for landmarks in recording([REST] * 12 + [0.0] * 60 + [REST, REST, 0.0, 0.0] * 150):
+            segmenter.push(landmarks)
+        self.assertLessEqual(len(segmenter.frames), segmenter.max_frames)
+
 
 if __name__ == "__main__":
     unittest.main()
