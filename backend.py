@@ -535,6 +535,10 @@ async def live226_predict(websocket: WebSocket):
     returns a result that waits for approval. With "auto_approve": true, which
     the user switches on, a confident result goes straight into the sentence;
     sending the action again changes it without restarting the stream.
+
+    Outside a recording, {"image": data_url, "preview": true} is answered with
+    {"type": "framing", "ok", "hint", ...}: whether the camera sees the space
+    the hands sign in. Hands-free frames carry the same under "framing".
     """
     identity = await _authenticate_socket(websocket)
     if identity is None:
@@ -552,6 +556,7 @@ async def live226_predict(websocket: WebSocket):
     segmenter: Optional[Segmenter] = None
     auto_approve = False
     streamed = 0
+    frame_shape = None
     try:
         while True:
             try:
@@ -582,33 +587,44 @@ async def live226_predict(websocket: WebSocket):
                 if len(clip) < MIN_CLIP_FRAMES:
                     await websocket.send_json({"type": "result", "error": "Kayıt çok kısa", "frames": len(clip)})
                 else:
-                    result = await asyncio.to_thread(LIVE226.predict, clip)
+                    result = await asyncio.to_thread(LIVE226.predict, clip, True, frame_shape)
                     top = result["top"]
                     session.present({row["gloss"]: row["confidence"] for row in top},
                                     candidate=top[0]["gloss"] if result["confident"] else None)
                     await websocket.send_json({"type": "result", "frames": len(clip), **result, **session.pending()})
                 clip, boxes = [], None
-            elif payload.get("image") and (segmenter is not None or len(clip) < MAX_CLIP_FRAMES):
+            elif payload.get("image"):
+                preview = bool(payload.get("preview")) and segmenter is None
+                if not preview and segmenter is None and len(clip) >= MAX_CLIP_FRAMES:
+                    continue
                 frame = decode_base64_image(payload["image"])
                 if frame is None:
                     continue
+                image = prepare_frame(frame)
+                frame_shape = image.shape
                 # Detect on every Nth frame, and on every frame while nobody has been found
-                index = streamed if segmenter is not None else len(clip)
+                index = len(clip) if segmenter is None and not preview else streamed
                 found = boxes is not None and len(boxes) > 0
                 reuse = boxes if found and index % LIVE226.detect_every else None
-                landmarks, boxes = await asyncio.to_thread(LIVE226.landmarks, prepare_frame(frame), reuse)
+                landmarks, boxes = await asyncio.to_thread(LIVE226.landmarks, image, reuse)
+                if preview:
+                    streamed += 1
+                    await websocket.send_json({"type": "framing", **LIVE226.framing(landmarks, frame_shape)})
+                    continue
                 if segmenter is None:
                     clip.append(landmarks)
                     await websocket.send_json({"type": "progress", "processed": len(clip)})
                     continue
                 streamed += 1
+                framing = LIVE226.framing(landmarks, frame_shape)
                 cut = segmenter.push(landmarks)
                 if cut is None:
-                    await websocket.send_json({"type": "watching", "state": "signing" if segmenter.signing else "waiting"})
+                    await websocket.send_json({"type": "watching", "framing": framing,
+                                               "state": "signing" if segmenter.signing else "waiting"})
                     continue
-                await websocket.send_json({"type": "watching", "state": "reading"})
+                await websocket.send_json({"type": "watching", "state": "reading", "framing": framing})
                 sign = list(cut[0])
-                result = await asyncio.to_thread(LIVE226.predict, sign, False)
+                result = await asyncio.to_thread(LIVE226.predict, sign, False, frame_shape)
                 top = result["top"]
                 candidate = top[0]["gloss"] if result["confident"] else None
                 session.present({row["gloss"]: row["confidence"] for row in top}, candidate=candidate)

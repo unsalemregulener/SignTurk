@@ -1,77 +1,69 @@
-"""Framing check for one frame of 226-class landmarks: is the signer in view?"""
+"""Framing check for one frame of 226-class landmarks: can the camera see the signing space?
+
+The model learnt from AUTSL, where the signer stands back from the camera:
+the frame reaches about 2.4 shoulder widths below the shoulder line, so the
+hands are in view at rest and while signing in front of the chest. Sitting
+close to a laptop camera cuts that space off. On the AUTSL test split, with
+the frame ending 1.5 shoulder widths below the shoulders accuracy drops from
+95.0% to 93.5%, at 1.0 to 91.5% and at 0.5 to 81.8%.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 
-from .features import HAND_NODES, LANDMARK_DIM, LEFT_HAND_NODES, RIGHT_HAND_NODES, TOTAL_LANDMARKS
+from .features import LANDMARK_DIM, TOTAL_LANDMARKS, frame_bounds
+
+NOSE, LEFT_SHOULDER, RIGHT_SHOULDER = 0, 11, 12
+SEEN = 0.25              # keypoint score above which a point counts as seen
+MIN_SPACE_BELOW = 1.2    # shoulder widths of frame needed below the shoulder line
+CLOSE_WIDTH = 0.22       # shoulders wider than this share of the frame: the signer is close
+MIN_WIDTH = 0.08         # narrower than this: too far for the hands to be read
+CENTRE = (0.25, 0.75)    # where the middle of the shoulders may lie, as a share of the width
 
 
 @dataclass
-class PoseQuality:
+class Framing:
     ok: bool
-    feedback: str   # shown to the user, Turkish
-    score: float
+    hint: Optional[str]                # shown to the user, Turkish
+    space_below: Optional[float] = None
+    width: Optional[float] = None      # shoulder width as a share of the frame width
+
+    def as_dict(self) -> dict:
+        return {"ok": self.ok, "hint": self.hint,
+                "space_below": None if self.space_below is None else round(self.space_below, 2),
+                "width": None if self.width is None else round(self.width, 3)}
 
 
-def evaluate_pose_quality(
-    landmarks: np.ndarray,
-    min_shoulder_width: float = 0.16,
-    max_shoulder_width: float = 0.55,
-    center_x_range: tuple = (0.28, 0.72),
-    upper_body_y_range: tuple = (0.15, 0.68),
-    min_pose_confidence: float = 0.25,
-    min_hand_visibility: float = 0.25,
-) -> PoseQuality:
-    """Judge the last frame of `landmarks` ((75, 4) or (T, 75, 4))."""
+def evaluate_framing(landmarks: np.ndarray, image_shape=None) -> Framing:
+    """Judge the last frame of `landmarks` ((75, 4) or (T, 75, 4)) taken from an image of `image_shape`."""
     arr = np.asarray(landmarks, dtype=np.float32)
     if arr.size == 0:
-        return PoseQuality(False, "Kameraya geçin", 0.0)
+        return Framing(False, "Kameraya geçin")
     frame = arr.reshape(-1, TOTAL_LANDMARKS, LANDMARK_DIM)[-1]
+    left, top, right, bottom = frame_bounds(image_shape) if image_shape is not None else (0.0, 0.0, 1.0, 1.0)
 
-    nose, left_shoulder, right_shoulder = frame[0, 3], frame[11, 3], frame[12, 3]
-    left_wrist, right_wrist = frame[15, 3], frame[16, 3]
-    hand_visibility = max(float(frame[LEFT_HAND_NODES, 3].mean()), float(frame[RIGHT_HAND_NODES, 3].mean()))
-    hand_signal = max(hand_visibility, float(left_wrist), float(right_wrist))
+    nose, left_shoulder, right_shoulder = frame[NOSE], frame[LEFT_SHOULDER], frame[RIGHT_SHOULDER]
+    if left_shoulder[3] < SEEN or right_shoulder[3] < SEEN:
+        return Framing(False, "Kameraya geçin" if nose[3] < SEEN else "Omuzlarınız görünmeli")
 
-    visible_parts = sum(value >= min_pose_confidence for value in (nose, left_shoulder, right_shoulder, left_wrist, right_wrist))
-    if visible_parts < 2:
-        return PoseQuality(False, "Kameraya geçin", 0.0)
-    if left_shoulder < min_pose_confidence or right_shoulder < min_pose_confidence:
-        return PoseQuality(False, "Üst gövdeniz görünmeli", 0.25)
+    shoulder_width = float(np.linalg.norm(left_shoulder[:2] - right_shoulder[:2]))
+    if shoulder_width < 1e-3:
+        return Framing(False, "Kameraya geçin")
+    width = abs(float(left_shoulder[0] - right_shoulder[0])) / max(right - left, 1e-6)
+    space_below = (bottom - float(left_shoulder[1] + right_shoulder[1]) / 2.0) / shoulder_width
+    centre = ((float(left_shoulder[0] + right_shoulder[0]) / 2.0) - left) / max(right - left, 1e-6)
 
-    shoulder_width = float(abs(frame[11, 0] - frame[12, 0]))
-    torso_x = float((frame[11, 0] + frame[12, 0]) / 2.0)
-    upper_body_y = float(frame[0, 1] if nose >= min_pose_confidence else (frame[11, 1] + frame[12, 1]) / 2.0)
-
-    points = frame[HAND_NODES]
-    points = points[points[:, 3] > 0]
-    wrists = frame[[15, 16]]
-    wrists = wrists[wrists[:, 3] >= min_pose_confidence]
-    if len(wrists):
-        points = np.concatenate([points, wrists], axis=0)
-    in_frame = 0.0
-    if len(points):
-        xy = points[:, :2]
-        in_frame = float(((xy[:, 0] >= 0.02) & (xy[:, 0] <= 0.98) & (xy[:, 1] >= 0.02) & (xy[:, 1] <= 0.98)).mean())
-
-    if shoulder_width < min_shoulder_width:
-        return PoseQuality(False, "Biraz yaklaşın", 0.45)
-    if shoulder_width > max_shoulder_width:
-        return PoseQuality(False, "Biraz uzaklaşın", 0.45)
-    if not center_x_range[0] <= torso_x <= center_x_range[1]:
-        return PoseQuality(False, "Kadrajın ortasına geçin", 0.55)
-    if not upper_body_y_range[0] <= upper_body_y <= upper_body_y_range[1]:
-        return PoseQuality(False, "Üst gövdeniz görünmeli", 0.55)
-    if hand_signal < min_hand_visibility or in_frame < 0.15:
-        return PoseQuality(False, "Ellerinizi kadraja alın", 0.65)
-
-    score = float(np.clip(np.mean([
-        min(1.0, shoulder_width / max(min_shoulder_width, 1e-6)),
-        1.0 - min(abs(torso_x - 0.5) / 0.5, 1.0),
-        min(hand_signal / max(min_hand_visibility, 1e-6), 1.0),
-        in_frame,
-    ]), 0.0, 1.0))
-    return PoseQuality(True, "Kadraj uygun", score)
+    if space_below < MIN_SPACE_BELOW:
+        hint = "Biraz geri çekilin" if width > CLOSE_WIDTH else "Kamerayı biraz aşağı eğin"
+        return Framing(False, hint, space_below, width)
+    if width < MIN_WIDTH:
+        return Framing(False, "Biraz yaklaşın", space_below, width)
+    if not CENTRE[0] <= centre <= CENTRE[1]:
+        return Framing(False, "Kadrajın ortasına geçin", space_below, width)
+    if nose[3] >= SEEN and float(nose[1]) < top + 0.01:
+        return Framing(False, "Başınız görünmeli", space_below, width)
+    return Framing(True, None, space_below, width)
