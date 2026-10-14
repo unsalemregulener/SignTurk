@@ -13,17 +13,21 @@ def load_config(root: Path = MODEL_ROOT) -> dict:
 
 
 def load_vocabulary(root: Path = MODEL_ROOT) -> list:
-    """One entry per model output: {"autsl_id": int, "gloss": str}.
+    """One entry per model output: {"autsl_id": int, "gloss": str, "en": str}.
 
     `labels/label_map.json` maps an AUTSL class id to a model index, and
     `labels/class_display_names.json` gives the AUTSL gloss with spaces;
     the gloss used everywhere else in the project has underscores.
+    `labels/class_names_en.json` has the English names from AUTSL's
+    SignList_ClassId_TR_EN.csv.
     """
     label_map = json.loads((root / "labels" / "label_map.json").read_text(encoding="utf-8"))
     names = json.loads((root / "labels" / "class_display_names.json").read_text(encoding="utf-8"))
+    english = json.loads((root / "labels" / "class_names_en.json").read_text(encoding="utf-8"))
     vocabulary = [None] * len(label_map)
     for autsl_id, index in label_map.items():
-        vocabulary[int(index)] = {"autsl_id": int(autsl_id), "gloss": names[autsl_id].strip().replace(" ", "_")}
+        vocabulary[int(index)] = {"autsl_id": int(autsl_id), "gloss": names[autsl_id].strip().replace(" ", "_"),
+                                  "en": english.get(autsl_id)}
     return vocabulary
 
 

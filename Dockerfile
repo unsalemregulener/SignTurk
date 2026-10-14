@@ -6,26 +6,18 @@ LABEL org.opencontainers.image.source="https://github.com/unsalemregulener/SignT
       org.opencontainers.image.title="SignTurk" \
       org.opencontainers.image.description="Real-time Turkish Sign Language recognition with a 3D avatar"
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 \
-    libglib2.0-0 \
-    libsm6 \
-    libxrender1 \
-    libxext6 \
+RUN apt-get update && apt-get install -y --no-install-recommends libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Model weights come from the GitHub release and are checked against model-assets.json.
-# MODELS=live builds a smaller image without the 226-class mode.
-ARG MODELS=all
 COPY model-assets.json .
 COPY tools/download_models.py tools/download_models.py
-COPY demo_assets_179/ demo_assets_179/
-RUN python tools/download_models.py --bundle ${MODELS}
+RUN python tools/download_models.py
 
-COPY backend.py database.py models.py live_pipeline.py live226.py landmark_smoother.py rate_limit.py ./
+COPY backend.py database.py models.py live226.py landmark_smoother.py rate_limit.py ./
 COPY signturk_runtime/ signturk_runtime/
 COPY research/model_226/config.json research/model_226/config.json
 COPY research/model_226/labels/ research/model_226/labels/

@@ -71,6 +71,7 @@ class Live226:
             "device": self.device,
             "num_classes": len(self.vocabulary),
             "frame_count": self.frame_count,
+            "thresholds": self.config["thresholds"],
             "detect_every": self.detect_every,
             "avg_frame_ms": self._average(self.frame_ms),
             "avg_detect_ms": self._average(self.detect_ms),
@@ -89,7 +90,7 @@ class Live226:
         missing = missing_files(self.config)
         if missing:
             self.state = "missing"
-            self.message = "Model dosyaları eksik: python tools/download_models.py --bundle 226"
+            self.message = "Model dosyaları eksik: python tools/download_models.py"
             logger.warning("[226] missing files: %s", ", ".join(missing))
             return
         self.state = "loading"

@@ -17,15 +17,11 @@ updates:
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: keras
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
-      - dependency-name: mediapipe
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
-      # numpy is a range (<2.0), which the update types do not cover; MediaPipe
-      # 0.10.21 needs 1.x.
+      # numpy is a range (<2.0), which the update types do not cover; a move to
+      # 2.x should be measured with tools/evaluate_226.py first.
       - dependency-name: numpy
         versions: [">=2.0"]
-      - dependency-name: opencv-python
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
-      - dependency-name: opencv-contrib-python
+      - dependency-name: opencv-python-headless
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: onnxruntime
         update-types: ["version-update:semver-major", "version-update:semver-minor"]

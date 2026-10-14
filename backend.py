@@ -5,7 +5,7 @@ over WebSocket, sentence assembly, and the landmark data that drives the
 3D avatar.
 """
 
-import asyncio, os, json, time, traceback, uuid, logging, base64, shutil, tempfile, secrets
+import asyncio, os, json, time, traceback, uuid, logging, base64, secrets
 import numpy as np
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -34,12 +34,7 @@ import models
 from text_processing.lexicon import restore_turkish, restore_turkish_words
 from live226 import Live226, prepare_frame
 from rate_limit import SlidingWindowLimiter
-from live_pipeline import (
-    count_detected_hands as count_live_hands,
-    hands_to_landmarks,
-    preprocess_sequence as preprocess_live_sequence,
-    resample_window,
-)
+from signturk_runtime.config import missing_files
 
 # ── Landmark smoothing ───────────────────────────────────
 try:
@@ -48,13 +43,8 @@ try:
 except ImportError:
     SMOOTHER_AVAILABLE = False
 
-# ── TensorFlow ────────────────────────────────────────────
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-import tensorflow as tf
-try:
-    tf.get_logger().setLevel("ERROR")
-except AttributeError:
-    logging.getLogger("tensorflow").setLevel(logging.ERROR)
+# TensorFlow, loaded with the 226 ensemble, logs errors only
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
 # ═══════════════════════════════════════════════════════════
 #  LOGGING
@@ -85,36 +75,8 @@ def verify_pw(plain: str, hashed: str) -> bool:
 # ═══════════════════════════════════════════════════════════
 BASE_DIR     = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR / "frontend"
-MODEL_DIR    = BASE_DIR / "demo_assets_179"
 UI_FILE      = FRONTEND_DIR / "signturk_ui.html"
 AVATAR_FILE  = FRONTEND_DIR / "avatar3d.html"
-
-# ═══════════════════════════════════════════════════════════
-#  GLOBALS — live recognition model (179 classes)
-# ═══════════════════════════════════════════════════════════
-MODEL        = None
-LABEL_MAP    = {}
-NORM_MEAN    = None
-NORM_STD     = None
-DEMO_CONFIG  = {}
-MP_HANDS     = None
-
-SEQ_LEN      = 16   # model input length (frames)
-CAPTURE_WINDOW = 32 # frames collected from the camera, resampled to SEQ_LEN
-FEAT_DIM     = 156
-NUM_CLASSES  = 179
-CONFIDENCE_THRESHOLD = 0.40
-MODEL_LOAD_TIME  = 0.0
-AVG_INFERENCE_MS = 0.0
-INFERENCE_COUNT  = 0
-
-MIN_HAND_NORM = 1e-6
-MEDIAPIPE_DETECTION_CONFIDENCE = 0.15
-MEDIAPIPE_TRACKING_CONFIDENCE = 0.15
-MEDIAPIPE_STATIC_IMAGE_MODE = False
-MEDIAPIPE_MODEL_COMPLEXITY = 1
-MAX_MISSED_HAND_FRAMES = 8
-LIVE_BUFFER_STRIDE = 0
 
 # Per-word landmark sequences that drive the 3D avatar
 _candidate_landmark_dirs = [
@@ -128,159 +90,8 @@ LANDMARK_INDEX = {}
 LIVE226 = Live226()
 
 # ═══════════════════════════════════════════════════════════
-#  MEDIAPIPE INIT
+#  AVATAR LANDMARKS
 # ═══════════════════════════════════════════════════════════
-def prepare_mediapipe_resource_path(mp_module):
-    """Copy MediaPipe graph files to an ASCII-only path when needed.
-
-    MediaPipe fails to open its resources when the package lives under a path
-    with non-ASCII characters (common in Windows user folders).
-    """
-    try:
-        package_root = Path(mp_module.__file__).resolve().parent
-        str(package_root).encode("ascii")
-        return
-    except UnicodeEncodeError:
-        pass
-    except Exception as e:
-        logger.warning(f"[MEDIAPIPE] Resource path check failed: {e}")
-        return
-
-    try:
-        from mediapipe.python import solution_base
-
-        ascii_root = Path(tempfile.gettempdir()) / "signturk_mediapipe_site"
-        modules_src = package_root / "modules"
-        modules_dst = ascii_root / "mediapipe" / "modules"
-        hand_graph = modules_dst / "hand_landmark" / "hand_landmark_tracking_cpu.binarypb"
-
-        if not hand_graph.exists():
-            modules_dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(modules_src, modules_dst, dirs_exist_ok=True)
-
-        fake_solution = ascii_root / "mediapipe" / "python" / "solution_base.py"
-        fake_solution.parent.mkdir(parents=True, exist_ok=True)
-        fake_solution.touch(exist_ok=True)
-        solution_base.__file__ = str(fake_solution)
-        logger.info(f"[MEDIAPIPE] Using ASCII resource root: {ascii_root}")
-    except Exception as e:
-        logger.warning(f"[MEDIAPIPE] ASCII resource workaround failed: {e}")
-
-
-def init_mediapipe():
-    """Create a MediaPipe Hands instance, trying each known import layout."""
-    try:
-        import mediapipe as mp
-        prepare_mediapipe_resource_path(mp)
-        hands = mp.solutions.hands.Hands(
-            static_image_mode=MEDIAPIPE_STATIC_IMAGE_MODE,
-            max_num_hands=2,
-            model_complexity=MEDIAPIPE_MODEL_COMPLEXITY,
-            min_detection_confidence=MEDIAPIPE_DETECTION_CONFIDENCE,
-            min_tracking_confidence=MEDIAPIPE_TRACKING_CONFIDENCE,
-        )
-        hands.process(np.zeros((100, 100, 3), dtype=np.uint8))
-        logger.info("[MEDIAPIPE] Strategy 1 OK")
-        return hands
-    except Exception as e:
-        logger.warning(f"[MEDIAPIPE] Strategy 1 failed: {e}")
-
-    try:
-        from mediapipe.python.solutions import hands as mp_hands
-        hands = mp_hands.Hands(
-            static_image_mode=MEDIAPIPE_STATIC_IMAGE_MODE,
-            max_num_hands=2,
-            model_complexity=MEDIAPIPE_MODEL_COMPLEXITY,
-            min_detection_confidence=MEDIAPIPE_DETECTION_CONFIDENCE,
-            min_tracking_confidence=MEDIAPIPE_TRACKING_CONFIDENCE,
-        )
-        hands.process(np.zeros((100, 100, 3), dtype=np.uint8))
-        logger.info("[MEDIAPIPE] Strategy 2 OK")
-        return hands
-    except Exception as e:
-        logger.warning(f"[MEDIAPIPE] Strategy 2 failed: {e}")
-
-    try:
-        import importlib
-        import mediapipe
-        hands_module = getattr(mediapipe, "solutions", None)
-        if hands_module is None:
-            hands_module = importlib.import_module("mediapipe.solutions")
-        hands = hands_module.hands.Hands(
-            static_image_mode=MEDIAPIPE_STATIC_IMAGE_MODE,
-            max_num_hands=2,
-            model_complexity=MEDIAPIPE_MODEL_COMPLEXITY,
-            min_detection_confidence=MEDIAPIPE_DETECTION_CONFIDENCE,
-            min_tracking_confidence=MEDIAPIPE_TRACKING_CONFIDENCE,
-        )
-        hands.process(np.zeros((100, 100, 3), dtype=np.uint8))
-        logger.info("[MEDIAPIPE] Strategy 3 OK")
-        return hands
-    except Exception as e:
-        logger.warning(f"[MEDIAPIPE] Strategy 3 failed: {e}")
-
-    logger.error("[MEDIAPIPE] All strategies failed")
-    return None
-
-
-# ═══════════════════════════════════════════════════════════
-#  MODEL LOADING
-# ═══════════════════════════════════════════════════════════
-def load_model_assets():
-    """Load the 179-class live model and its preprocessing assets."""
-    global MODEL, LABEL_MAP, NORM_MEAN, NORM_STD, DEMO_CONFIG, MP_HANDS
-    global SEQ_LEN, CAPTURE_WINDOW, FEAT_DIM, NUM_CLASSES, CONFIDENCE_THRESHOLD, MODEL_LOAD_TIME
-
-    t0 = time.time()
-
-    cfg_path = MODEL_DIR / "demo_config.json"
-    if cfg_path.exists():
-        with open(cfg_path, encoding="utf-8") as f:
-            DEMO_CONFIG = json.load(f)
-        SEQ_LEN              = DEMO_CONFIG.get("seq_len", 16)
-        CAPTURE_WINDOW       = DEMO_CONFIG.get("capture_window", 32)
-        FEAT_DIM             = DEMO_CONFIG.get("feat_dim", 156)
-        NUM_CLASSES          = DEMO_CONFIG.get("num_classes", 179)
-        CONFIDENCE_THRESHOLD = DEMO_CONFIG.get("confidence_threshold", 0.40)
-        logger.info(f"[CONFIG] seq_len={SEQ_LEN} capture_window={CAPTURE_WINDOW} feat_dim={FEAT_DIM} num_classes={NUM_CLASSES}")
-
-    lm_path = MODEL_DIR / "label_map.json"
-    if lm_path.exists():
-        with open(lm_path, encoding="utf-8") as f:
-            LABEL_MAP = json.load(f)
-        logger.info(f"[LABELS] Loaded {len(LABEL_MAP)} classes")
-
-    ns_path = MODEL_DIR / "norm_stats.json"
-    if ns_path.exists():
-        with open(ns_path, encoding="utf-8") as f:
-            ns = json.load(f)
-        NORM_MEAN = np.array(ns["mean"], dtype=np.float32)
-        NORM_STD  = np.where(np.array(ns["std"], dtype=np.float32) < 1e-6, 1.0,
-                             np.array(ns["std"], dtype=np.float32))
-
-    model_path = MODEL_DIR / "model.keras"
-    if model_path.exists():
-        try:
-            @tf.keras.utils.register_keras_serializable()
-            class ReduceSumAxis1(tf.keras.layers.Layer):
-                def call(self, inputs):
-                    return tf.reduce_sum(inputs, axis=1)
-                def compute_output_shape(self, input_shape):
-                    return (input_shape[0], input_shape[2])
-
-            MODEL = tf.keras.models.load_model(str(model_path), compile=False)
-            MODEL.predict(np.zeros((1, SEQ_LEN, FEAT_DIM), dtype=np.float32), verbose=0)
-            logger.info(f"[MODEL] Loaded {MODEL.input_shape} -> {MODEL.output_shape}")
-        except Exception as e:
-            logger.error(f"[MODEL] Could not load model: {e}")
-    else:
-        logger.warning(f"[MODEL] {model_path} missing; run: python tools/download_models.py")
-
-    MP_HANDS = init_mediapipe()
-    MODEL_LOAD_TIME = time.time() - t0
-    logger.info(f"[STARTUP] Live assets loaded in {MODEL_LOAD_TIME:.2f}s")
-
-
 def load_landmark_index():
     """Index the per-word landmark files used for avatar playback."""
     global LANDMARKS_DIR, LANDMARK_INDEX
@@ -299,124 +110,6 @@ def load_landmark_index():
         logger.info(f"[LANDMARKS] Indexed {len(LANDMARK_INDEX)} words")
     else:
         logger.warning("[LANDMARKS] Landmark directory not found")
-
-
-# ═══════════════════════════════════════════════════════════
-#  PREPROCESSING
-# ═══════════════════════════════════════════════════════════
-def extract_landmarks_from_frame(frame: np.ndarray, mirror: bool = False, tracker=None) -> Optional[np.ndarray]:
-    """Return 126 hand coordinates in the training layout for one BGR frame.
-
-    `tracker` is a MediaPipe Hands instance. It follows hands from frame to
-    frame, so every live connection passes its own.
-    """
-    tracker = tracker or MP_HANDS
-    if tracker is None:
-        return None
-    try:
-        if mirror:
-            frame = cv2.flip(frame, 1)
-        rgb = np.ascontiguousarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        results = tracker.process(rgb)
-        hands = []
-        if results.multi_hand_landmarks and results.multi_handedness:
-            for hl, hand in zip(results.multi_hand_landmarks, results.multi_handedness):
-                hands.append((hand.classification[0].label,
-                              [[lm.x, lm.y, lm.z] for lm in hl.landmark]))
-        return hands_to_landmarks(hands)
-    except Exception as e:
-        logger.error(f"[MEDIAPIPE] Frame error: {e}")
-        return np.zeros(126, dtype=np.float32)
-
-
-def count_detected_hands(landmarks: np.ndarray) -> int:
-    return count_live_hands(landmarks, MIN_HAND_NORM)
-
-
-def preprocess_sequence(raw_landmarks):
-    """Resample a capture window to the model length and build the features."""
-    return preprocess_live_sequence(resample_window(raw_landmarks, SEQ_LEN), NORM_MEAN, NORM_STD)
-
-
-# ═══════════════════════════════════════════════════════════
-#  INFERENCE
-# ═══════════════════════════════════════════════════════════
-def get_label(model_index: int) -> Dict[str, Any]:
-    key = str(model_index)
-    if key in LABEL_MAP:
-        e = LABEL_MAP[key]
-        gloss = e.get("TR", f"class_{model_index}")
-        return {"class_id": model_index,
-                "label_tr": gloss,
-                "text_tr": restore_turkish(gloss),
-                "label_en": e.get("EN", f"class_{model_index}").replace("_", " ")}
-    return {"class_id": model_index,
-            "label_tr": f"class_{model_index}",
-            "text_tr": f"class_{model_index}",
-            "label_en": f"class_{model_index}"}
-
-
-def run_inference(input_tensor):
-    global AVG_INFERENCE_MS, INFERENCE_COUNT
-    if MODEL is None:
-        return None
-    t0 = time.time()
-    proba = MODEL.predict(input_tensor, verbose=0)
-    elapsed_ms = (time.time() - t0) * 1000
-    INFERENCE_COUNT += 1
-    AVG_INFERENCE_MS = (AVG_INFERENCE_MS * (INFERENCE_COUNT-1) + elapsed_ms) / INFERENCE_COUNT
-
-    top_indices = np.argsort(proba[0])[::-1][:5]
-    best_idx = int(top_indices[0])
-    best_conf = float(proba[0][best_idx])
-    best_lbl = get_label(best_idx)
-
-    return {
-        "class_id": best_lbl["class_id"],
-        "label_tr": best_lbl["label_tr"],
-        "text_tr": best_lbl["text_tr"],
-        "label_en": best_lbl["label_en"],
-        "confidence": best_conf,
-        "animation_key": best_lbl["label_tr"].lower() if best_lbl["label_tr"].lower() in LANDMARK_INDEX else "none",
-        "category": "Sign",
-        "above_threshold": best_conf >= CONFIDENCE_THRESHOLD,
-        "top_predictions": [
-            {"class_id": int(i), **get_label(int(i)),
-             "confidence": round(float(proba[0][i]), 4)}
-            for i in top_indices[:3]
-        ],
-    }
-
-
-def run_best_inference(sequence: np.ndarray):
-    return run_inference(preprocess_sequence(sequence))
-
-
-# ═══════════════════════════════════════════════════════════
-#  FRAME BUFFER — live WebSocket
-# ═══════════════════════════════════════════════════════════
-class FrameBuffer:
-    def __init__(self, seq_len=16):
-        self.seq_len = seq_len
-        self.buffer: List[np.ndarray] = []
-
-    def clear(self):
-        self.buffer.clear()
-
-    def keep_tail(self, n):
-        if n <= 0:
-            self.clear()
-        elif len(self.buffer) > n:
-            self.buffer = self.buffer[-n:]
-
-    def add(self, landmarks):
-        self.buffer.append(landmarks)
-        if len(self.buffer) > self.seq_len:
-            self.buffer.pop(0)
-        return np.stack(self.buffer, axis=0) if len(self.buffer) == self.seq_len else None
-
-    def __len__(self):
-        return len(self.buffer)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -478,7 +171,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="SignTurk API", version="3.1.0", lifespan=lifespan)
+app = FastAPI(title="SignTurk API", version="4.0.0", lifespan=lifespan)
 
 _ALLOWED_ORIGINS = [
     origin.strip()
@@ -616,25 +309,12 @@ async def avatar3d():
 async def health():
     return {
         "status": "ok",
-        "model_loaded": MODEL is not None,
-        "mediapipe_ready": MP_HANDS is not None,
         "landmark_count": len(LANDMARK_INDEX),
         "database": database_name(),
-        "seq_len": SEQ_LEN,
-        "capture_window": CAPTURE_WINDOW,
-        "feat_dim": FEAT_DIM,
-        "num_classes": NUM_CLASSES,
-        "confidence_threshold": CONFIDENCE_THRESHOLD,
         "ui_file": UI_FILE.name,
         "ui_ready": UI_FILE.exists(),
-        "stream_paths": ["/api/predict/live", "/ws/stream", "/api/predict/live226"],
+        "stream_paths": ["/api/predict/live226"],
         "model_226": LIVE226.status(),
-        "mediapipe_detection_threshold": MEDIAPIPE_DETECTION_CONFIDENCE,
-        "mediapipe_tracking_threshold": MEDIAPIPE_TRACKING_CONFIDENCE,
-        "mediapipe_static_image_mode": MEDIAPIPE_STATIC_IMAGE_MODE,
-        "mediapipe_model_complexity": MEDIAPIPE_MODEL_COMPLEXITY,
-        "missed_hand_grace_frames": MAX_MISSED_HAND_FRAMES,
-        "live_buffer_stride": LIVE_BUFFER_STRIDE,
     }
 
 
@@ -763,9 +443,9 @@ class SentenceSession:
     """Approved words of one live connection.
 
     A prediction only becomes part of the sentence (and of History) after the
-    user approves it. `candidate` is the latest confident prediction waiting
-    for that decision; `scores` keeps the confidences of the latest result so
-    an approved alternative is stored with its own confidence.
+    user approves it. `candidate` is the top sign of the latest result when it
+    is confident enough; `scores` keeps the confidences of that result so an
+    approved alternative is stored with its own confidence.
     """
 
     def __init__(self, db: Session, user_id: int, mode: str):
@@ -776,11 +456,6 @@ class SentenceSession:
         self.words: List[str] = []
         self.candidate: Optional[str] = None
         self.scores: Dict[str, float] = {}
-
-    def offer(self, word: str, confidence: float) -> None:
-        """A confident live prediction becomes the candidate."""
-        self.candidate = word
-        self.scores = {word: confidence}
 
     def present(self, scores: Dict[str, float], candidate: Optional[str] = None) -> None:
         """The result of one recorded sign replaces the previous one."""
@@ -831,141 +506,6 @@ class SentenceSession:
             logger.warning(f"[DB] approved word save skipped: {e}")
 
 
-@app.websocket("/ws/stream")
-@app.websocket("/api/predict/live")
-async def live_predict(websocket: WebSocket):
-    identity = await _authenticate_socket(websocket)
-    if identity is None:
-        return
-    user_id, user_email = identity
-    logger.info("[WS-LIVE] Connected")
-    db = next(get_db())
-    add_log_db(db, "Info", "Canlı akış bağlandı", user_email)
-    buf = FrameBuffer(seq_len=CAPTURE_WINDOW)
-    missed_hand_frames = 0
-    session = SentenceSession(db, user_id, mode="Live")
-    # MediaPipe tracks hands across frames, so each connection gets its own
-    # tracker; frame work runs in a thread to keep other connections moving.
-    tracker = await asyncio.to_thread(init_mediapipe) if MP_HANDS is not None else None
-    try:
-        while True:
-            incoming = await websocket.receive_text()
-            landmarks = None
-            image_payload = None
-            mirror_frame = False
-            try:
-                payload = json.loads(incoming)
-                action = payload.get("action") if isinstance(payload, dict) else None
-                if action:
-                    if action in SENTENCE_ACTIONS:
-                        await websocket.send_json(session.handle(action, payload))
-                    continue
-                if "landmarks" in payload:
-                    arr = np.array(payload["landmarks"], dtype=np.float32)
-                    if arr.shape == (126,):
-                        landmarks = arr
-                else:
-                    image_payload = (
-                        payload.get("image")
-                        or payload.get("frame")
-                        or payload.get("data_url")
-                        or payload.get("dataUrl")
-                    )
-                    mirror_frame = bool(payload.get("mirror", False))
-            except (json.JSONDecodeError, ValueError):
-                pass
-
-            if landmarks is None:
-                frame = decode_base64_image(image_payload or incoming)
-                if frame is None:
-                    await websocket.send_json({"class_id": -1, "label_tr": "-",
-                        "label_en": "-", "confidence": 0, "animation_key": "none"})
-                    continue
-                landmarks = await asyncio.to_thread(extract_landmarks_from_frame, frame, mirror_frame, tracker)
-                if landmarks is None:
-                    await websocket.send_json({"class_id": -1,
-                        "label_tr": "MediaPipe kullanılamıyor",
-                        "label_en": "Install mediapipe",
-                        "confidence": 0, "animation_key": "none"})
-                    continue
-
-            hands_detected = count_detected_hands(landmarks)
-            if hands_detected == 0:
-                missed_hand_frames += 1
-                if missed_hand_frames >= MAX_MISSED_HAND_FRAMES:
-                    buf.clear()
-                await websocket.send_json({
-                    "class_id": -1,
-                    "label_tr": "Takip korunuyor" if len(buf) else "El algılanmadı",
-                    "label_en": "Tracking hold" if len(buf) else "No hand detected",
-                    "confidence": 0,
-                    "animation_key": "none",
-                    "category": "-",
-                    "hands_detected": 0,
-                    "buffer_length": len(buf),
-                    "missed_hand_frames": missed_hand_frames,
-                })
-                continue
-
-            missed_hand_frames = 0
-            sequence = buf.add(landmarks)
-            if sequence is None:
-                await websocket.send_json({"class_id": -1,
-                    "label_tr": f"Kare toplanıyor ({len(buf)}/{CAPTURE_WINDOW})",
-                    "label_en": "Collecting...",
-                    "confidence": len(buf)/CAPTURE_WINDOW,
-                    "animation_key": "none",
-                    "category": "-",
-                    "hands_detected": hands_detected,
-                    "buffer_length": len(buf)})
-                continue
-
-            if MODEL is None:
-                await websocket.send_json({"class_id": -1,
-                    "label_tr": "Model yüklenmedi", "label_en": "Model not loaded",
-                    "confidence": 0, "animation_key": "none"})
-                continue
-
-            prediction = await asyncio.to_thread(run_best_inference, sequence)
-            if prediction is None:
-                continue
-
-            result = {
-                "class_id": prediction["class_id"],
-                "label_tr": prediction["label_tr"] if prediction["above_threshold"]
-                            else f"({prediction['label_tr']}?)",
-                "text_tr": prediction["text_tr"],
-                "label_en": prediction["label_en"],
-                "confidence": prediction["confidence"],
-                "animation_key": prediction["animation_key"],
-                "category": prediction["category"],
-                "top_predictions": prediction.get("top_predictions", []),
-                "above_threshold": prediction["above_threshold"],
-                "threshold": CONFIDENCE_THRESHOLD,
-                "variant": "normal",
-                "hands_detected": hands_detected,
-                "buffer_length": len(buf),
-            }
-
-            if prediction["above_threshold"]:
-                session.offer(prediction["label_tr"], prediction["confidence"])
-            result.update(session.pending())
-
-            await websocket.send_json(result)
-            buf.keep_tail(LIVE_BUFFER_STRIDE)
-
-    except WebSocketDisconnect:
-        logger.info("[WS-LIVE] Disconnected")
-        add_log_db(db, "Info", "Canlı akış kapandı", user_email)
-    except Exception as e:
-        logger.error(f"[WS-LIVE] Error: {e}\n{traceback.format_exc()}")
-        add_log_db(db, "Warning", f"Canlı akış hatası: {e}", user_email)
-    finally:
-        if tracker is not None:
-            tracker.close()
-        db.close()
-
-
 MIN_CLIP_FRAMES = 8
 MAX_CLIP_FRAMES = 96
 
@@ -978,7 +518,8 @@ async def live226_predict(websocket: WebSocket):
     the clip's unmirrored frames as
     {"image": data_url}, then {"action": "end"}. Each frame is processed as it
     arrives ({"type": "progress"}); "end" returns {"type": "result"} with the
-    top three signs. Approval actions work as on /api/predict/live.
+    top three signs. The approval actions (approve, reject, undo,
+    reset_sentence) answer with {"type": "sentence_update"} or "rejected".
     """
     identity = await _authenticate_socket(websocket)
     if identity is None:
@@ -1036,21 +577,6 @@ async def live226_predict(websocket: WebSocket):
         db.close()
 
 
-@app.post("/api/predict/sequence")
-async def predict_sequence(payload: Dict[str, Any], _user=Depends(current_user)):
-    try:
-        raw = np.array(payload["landmarks"], dtype=np.float32)
-        if raw.ndim != 2 or raw.shape[1] != 126 or raw.shape[0] not in (SEQ_LEN, CAPTURE_WINDOW):
-            return JSONResponse(status_code=400,
-                content={"error": f"Beklenen ({SEQ_LEN} veya {CAPTURE_WINDOW}, 126), gelen {list(raw.shape)}"})
-        result = run_best_inference(raw)
-        if result is None:
-            return JSONResponse(status_code=503, content={"error": "Model yüklenmedi"})
-        return result
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
-
-
 # ═══════════════════════════════════════════════════════════
 #  ROUTES — History / Settings / Dictionary / Admin
 # ═══════════════════════════════════════════════════════════
@@ -1067,19 +593,11 @@ def _average_confidence(rows) -> float:
 
 def _model_status() -> Dict[str, Any]:
     return {
-        "model_loaded": MODEL is not None,
-        "live_model": "Yüklü" if MODEL else "Yüklenmedi",
-        "num_classes": NUM_CLASSES,
-        "seq_len": SEQ_LEN,
-        "capture_window": CAPTURE_WINDOW,
-        "feat_dim": FEAT_DIM,
-        "label_map_size": len(LABEL_MAP),
-        "landmark_words": len(LANDMARK_INDEX),
-        "mediapipe_ready": MP_HANDS is not None,
-        "confidence_threshold": CONFIDENCE_THRESHOLD,
-        "avg_inference": f"{AVG_INFERENCE_MS:.0f} ms" if INFERENCE_COUNT else "Henüz yok",
-        "database": database_name(),
         "model_226": LIVE226.status(),
+        "thresholds": LIVE226.config["thresholds"],
+        "streams": {name: spec["weight"] for name, spec in LIVE226.config["streams"].items()},
+        "landmark_words": len(LANDMARK_INDEX),
+        "database": database_name(),
     }
 
 
@@ -1119,21 +637,14 @@ def save_settings(data: SettingsData, db: Session = Depends(get_db), user=Depend
     return {"message": "Ayarlar kaydedildi", "data": data.model_dump()}
 
 def _dictionary_entries() -> List[Dict[str, Any]]:
-    """All 226 AUTSL signs; English names exist for the 179 in the live model."""
-    live = {info.get("TR"): (int(index), info) for index, info in LABEL_MAP.items()}
-    rows = []
-    for entry in sorted(LIVE226.vocabulary, key=lambda e: e["autsl_id"]):
-        gloss = entry["gloss"]
-        index, info = live.get(gloss, (None, {}))
-        rows.append({
-            "class_id": entry["autsl_id"],
-            "tr": gloss,
-            "text": restore_turkish(gloss),
-            "en": info.get("EN", "").replace("_", " ") or None,
-            "live_179_id": index,
-            "animation_key": gloss if gloss in LANDMARK_INDEX else None,
-        })
-    return rows
+    """All 226 AUTSL signs with their Turkish spelling and English name."""
+    return [{
+        "class_id": entry["autsl_id"],
+        "tr": entry["gloss"],
+        "text": restore_turkish(entry["gloss"]),
+        "en": entry.get("en"),
+        "animation_key": entry["gloss"] if entry["gloss"] in LANDMARK_INDEX else None,
+    } for entry in sorted(LIVE226.vocabulary, key=lambda e: e["autsl_id"])]
 
 @app.get("/api/dictionary")
 async def get_dictionary():
@@ -1182,13 +693,11 @@ async def admin_model(_admin=Depends(admin_user)):
 @app.get("/api/debug/model-check")
 async def debug_model_check(_admin=Depends(admin_user)):
     return {
-        "live_model_loaded": MODEL is not None,
-        "mediapipe_ready": MP_HANDS is not None,
-        "label_map_entries": len(LABEL_MAP),
+        "model_226": LIVE226.status(),
+        "missing_files": missing_files(LIVE226.config),
+        "extractor": LIVE226.config["extractor"],
         "landmark_words": len(LANDMARK_INDEX),
-        "norm_stats_loaded": NORM_MEAN is not None,
         "smoother_available": SMOOTHER_AVAILABLE,
-        "config": DEMO_CONFIG,
     }
 
 
@@ -1238,15 +747,12 @@ async def startup_event():
     finally:
         db.close()
 
-    load_model_assets()
     load_landmark_index()
     LIVE226.start_loading()
 
     logger.info("=" * 60)
     logger.info("  SignTurk backend ready")
-    logger.info(f"  Model:      {'LOADED' if MODEL else 'MISSING'}")
     logger.info(f"  Landmarks:  {len(LANDMARK_INDEX)} words")
-    logger.info(f"  MediaPipe:  {'READY' if MP_HANDS else 'MISSING'}")
     logger.info(f"  226 model:  {LIVE226.state.upper()}")
     logger.info("=" * 60)
 

@@ -117,8 +117,7 @@ class VocabularyTests(unittest.TestCase):
         manifest = json.loads((ROOT / "model-assets.json").read_text(encoding="utf-8"))["assets"]
         wanted = {f"research/model_226/{stream['file']}" for stream in config["streams"].values()}
         wanted |= {f"research/model_226/{config['extractor'][key]}" for key in ("detector", "pose")}
-        self.assertEqual({a["path"] for a in manifest if a["bundle"] == "226"}, wanted)
-        self.assertEqual({a["bundle"] for a in manifest}, {"live", "226"})
+        self.assertEqual({a["path"] for a in manifest}, wanted)
         for asset in manifest:
             self.assertTrue(asset["url"].startswith("https://"), asset["name"])
             self.assertEqual(len(asset["sha256"]), 64, asset["name"])

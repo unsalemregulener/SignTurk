@@ -11,8 +11,8 @@ The dataset folder needs `SignList_ClassId_TR_EN.csv`, `train_labels.csv` and
 file when it serves it unless the file is marked `"smoothed": true`.
 
 `left_hand` and `right_hand` are the HandLandmarker's labels, which name the
-signer's own hands. The Hands solution used on the live path names them the
-other way round (see `live_pipeline.TRAINING_HAND_ORDER`).
+signer's own hands. MediaPipe is not in requirements.txt; install it for this
+tool with `pip install mediapipe`.
 """
 
 import argparse

@@ -1,14 +1,13 @@
-"""End-to-end check of the backend with the real model and MediaPipe.
+"""End-to-end check of the backend with the real 226-class models.
 
 Needs the full requirements, httpx and the downloaded weights:
 
-    pip install -r requirements.txt httpx
+    pip install -r requirements-dev.txt
     python tools/download_models.py
     python tests/backend_smoke.py
 
 Runs against a throwaway SQLite database. Test credentials are generated at
-run time and never printed. SMOKE_FAKE_MEDIAPIPE=1 skips the check that needs
-MediaPipe to find hands in a real video.
+run time and never printed.
 """
 import base64
 import json
@@ -36,7 +35,6 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 import backend
-from live_pipeline import hands_to_landmarks, resample_window
 from text_processing.lexicon import restore_turkish
 
 results = []
@@ -45,29 +43,6 @@ results = []
 def check(name, ok, detail=""):
     results.append(bool(ok))
     print(("PASS " if ok else "FAIL ") + name + (f"  [{detail}]" if detail and not ok else ""))
-
-
-def landmark_vectors(path):
-    """Model input layout for a landmark file.
-
-    The files were extracted with MediaPipe's Tasks HandLandmarker, which
-    names the signer's own hands; the live Hands solution names them the other
-    way round, so left_hand is passed as its "Right".
-    """
-    frames = json.loads(Path(path).read_text(encoding="utf-8"))["frames"]
-    return np.stack([hands_to_landmarks([("Right", frame.get("left_hand")), ("Left", frame.get("right_hand"))])
-                     for frame in frames])
-
-
-def video_frame_data_url(path, position=0.5):
-    capture = cv2.VideoCapture(str(path))
-    capture.set(cv2.CAP_PROP_POS_FRAMES, int(capture.get(cv2.CAP_PROP_FRAME_COUNT) * position))
-    ok, frame = capture.read()
-    capture.release()
-    if not ok:
-        raise RuntimeError(f"could not read a frame from {path}")
-    ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-    return "data:image/jpeg;base64," + base64.b64encode(jpeg.tobytes()).decode("ascii")
 
 
 def camera_frames(path, end=0.55):
@@ -100,15 +75,15 @@ def camera_clip(path, count=32):
 
 
 @contextmanager
-def live_socket(client, path, token):
-    """A live WebSocket that has sent its token as the first message."""
-    with client.websocket_connect(path) as ws:
+def live_socket(client, token):
+    """The live WebSocket after its token went in the first message."""
+    with client.websocket_connect("/api/predict/live226") as ws:
         ws.send_text(json.dumps({"action": "auth", "token": token}))
         yield ws
 
 
-def wait_for_226(client, seconds=900):
-    """The 226 models load in the background; wait until they settle."""
+def wait_for_model(client, seconds=900):
+    """The models load in the background; wait until they settle."""
     deadline = time.time() + seconds
     while True:
         status = client.get("/api/health").json()["model_226"]
@@ -117,19 +92,21 @@ def wait_for_226(client, seconds=900):
         time.sleep(2)
 
 
-def synthetic_hands(n):
-    """Two-hand landmark vectors with a little motion."""
-    base = np.random.default_rng(0).uniform(0.3, 0.7, size=126).astype(np.float32)
-    return [(base + 0.01 * np.sin(i / 3.0)).tolist() for i in range(n)]
+def record(ws, clip):
+    """Send one recorded sign and return the result and the number of processed frames."""
+    ws.send_text(json.dumps({"action": "start"}))
+    started = ws.receive_json().get("type") == "recording"
+    processed = 0
+    for frame in clip:
+        ws.send_text(json.dumps({"image": frame}))
+        processed = ws.receive_json().get("processed", processed)
+    ws.send_text(json.dumps({"action": "end"}))
+    return started, ws.receive_json(), processed
 
 
 with TestClient(backend.app) as client:
     health = client.get("/api/health").json()
     check("health ok", health.get("status") == "ok", health)
-    check("model loaded", health.get("model_loaded") is True)
-    check("MediaPipe ready", health.get("mediapipe_ready") is True)
-    check("capture window 32, model input 16 x 156",
-          (health.get("capture_window"), health.get("seq_len"), health.get("feat_dim")) == (32, 16, 156), health)
     check("226 avatar signs indexed", health.get("landmark_count") == 226, health.get("landmark_count"))
 
     email, password = "user@example.com", secrets.token_urlsafe(12)
@@ -163,7 +140,7 @@ with TestClient(backend.app) as client:
         client.get(p, headers=U).status_code == 403
         for p in ("/api/admin/overview", "/api/admin/users", "/api/admin/logs", "/api/admin/model", "/api/debug/model-check")))
     check("admin routes accept admins", client.get("/api/admin/overview", headers=A).status_code == 200)
-    check("model status for users", client.get("/api/model/status", headers=U).json().get("model_loaded") is True)
+    check("model files are all present", client.get("/api/debug/model-check", headers=A).json().get("missing_files") == [])
 
     check("settings defaults", client.get("/api/settings", headers=U).json()
           == {"tts_enabled": False, "speech_rate": 1.0, "avatar_speed": 1.0})
@@ -174,10 +151,11 @@ with TestClient(backend.app) as client:
     signs = client.get("/signs").json()
     check("avatar signs have Turkish labels", len(signs["labels"]) == 226 and signs["labels"].get("cay") == "çay")
     dictionary = client.get("/api/dictionary").json()
-    check("dictionary lists 226 signs, 179 of them in the live model",
-          len(dictionary) == 226 and sum(entry["live_179_id"] is not None for entry in dictionary) == 179)
-    check("English labels have no underscores", all("_" not in (entry["en"] or "") for entry in dictionary))
-    check("dictionary entry by AUTSL id", client.get("/api/dictionary/38").json().get("text") == "çay")
+    check("dictionary lists 226 signs with English names",
+          len(dictionary) == 226 and all(entry["en"] for entry in dictionary))
+    check("English labels have no underscores", all("_" not in entry["en"] for entry in dictionary))
+    entry = client.get("/api/dictionary/38").json()
+    check("dictionary entry by AUTSL id", (entry.get("text"), entry.get("en")) == ("çay", "tea"), entry)
 
     check("text API needs a token", client.get("/api/text/models").status_code == 401)
     r = client.post("/api/text/correct", headers=U, json={"words": ["ben", "okul", "gitmek"]})
@@ -185,155 +163,74 @@ with TestClient(backend.app) as client:
           and r.json()["tts_status"] == "disabled", r.text)
     check("text cache is admin only", client.delete("/api/text/cache", headers=U).status_code == 403)
 
-    window = resample_window(landmark_vectors(ROOT / "landmarks" / "cay.json"), 16)
-    r = client.post("/api/predict/sequence", headers=U, json={"landmarks": window.tolist()})
-    body = r.json()
-    check("landmarks/cay.json is recognised as cay", r.status_code == 200 and body.get("label_tr") == "cay",
-          [(p["label_tr"], p["confidence"]) for p in body.get("top_predictions", [])])
+    status = wait_for_model(client)
+    check("model ready", status["ready"], status)
+    model = client.get("/api/model/status", headers=U).json()
+    check("model status for users", model["model_226"]["num_classes"] == 226 and len(model["streams"]) == 4, model)
 
-    # The avatar recordings come from AUTSL training videos, so this checks the
-    # input pipeline end to end, not accuracy on new signers.
-    model_glosses = {entry["TR"] for entry in backend.LABEL_MAP.values()}
-    recordings = sorted(p for p in (ROOT / "landmarks").glob("*.json") if p.stem in model_glosses)
-    correct = 0
-    for path in recordings:
-        window = resample_window(landmark_vectors(path), 16)
-        reply = client.post("/api/predict/sequence", headers=U, json={"landmarks": window.tolist()}).json()
-        correct += int(reply.get("label_tr") == path.stem)
-    share = correct / max(len(recordings), 1)
-    print(f"     avatar recordings of the 179 model classes: top-1 {correct}/{len(recordings)} ({share:.1%})")
-    check("pipeline matches training on the avatar recordings", len(recordings) == 179 and share >= 0.85, share)
-    r = client.post("/api/predict/sequence", headers=U, json={"landmarks": [[0.0] * 126] * 20})
-    check("sequence of the wrong length rejected", r.status_code == 400)
-
-    for name, path in (("live socket refuses a missing token", "/api/predict/live"),
-                       ("token in the URL is not accepted", f"/api/predict/live?token={user_token}")):
+    for name, path in (("live socket refuses a missing token", "/api/predict/live226"),
+                       ("token in the URL is not accepted", f"/api/predict/live226?token={user_token}")):
         try:
             with client.websocket_connect(path) as ws:
-                ws.send_text(json.dumps({"landmarks": [0.0] * 126}))
+                ws.send_text(json.dumps({"action": "start"}))
                 ws.receive_text()
             check(name, False)
         except WebSocketDisconnect as exc:
             check(name, exc.code == 1008, exc.code)
 
-    with live_socket(client, "/api/predict/live", user_token) as ws:
-        ws.send_text(json.dumps({"image": video_frame_data_url(ROOT / "docs" / "videos" / "cay.mp4")}))
-        reply = ws.receive_json()
-        check("MediaPipe processes a camera frame", reply.get("label_tr") != "MediaPipe kullanılamıyor", reply)
-
-    # The fast mode end to end on a webcam recording: frames at 10 fps, as the
-    # browser sends them, through MediaPipe and the model.
-    if os.environ.get("SMOKE_FAKE_MEDIAPIPE") == "1":
-        print("     skipped the cay recording: it needs the real MediaPipe")
-    else:
-        frames = camera_frames(ROOT / "docs" / "videos" / "cay.mp4", end=0.6)[::3]
-        tracker = backend.init_mediapipe()
-        vectors = [v for v in (backend.extract_landmarks_from_frame(f, False, tracker) for f in frames)
-                   if v is not None and backend.count_detected_hands(v) > 0]
-        if tracker is not None:
-            tracker.close()
-        if len(vectors) >= backend.CAPTURE_WINDOW:
-            window = np.stack(vectors[:backend.CAPTURE_WINDOW])
-            swapped = np.concatenate([window[:, 63:], window[:, :63]], axis=1)
-            for name, candidate in (("live order", window), ("hands swapped", swapped)):
-                top = backend.run_best_inference(candidate)["top_predictions"]
-                print(f"     cay recording, {name}: {[(p['label_tr'], p['confidence']) for p in top]}")
-        first = None
-        with live_socket(client, "/api/predict/live", user_token) as ws:
-            for frame in frames:
-                ws.send_text(json.dumps({"image": data_url(frame)}))
-                reply = ws.receive_json()
-                if reply.get("class_id", -1) >= 0:
-                    first = reply
-                    break
-        check("fast mode recognises the cay recording",
-              first is not None and first["label_tr"].strip("()?") == "cay",
-              first and [(p["label_tr"], p["confidence"]) for p in first["top_predictions"]] or f"{len(vectors)} hand frames")
-
-    with live_socket(client, "/api/predict/live", user_token) as ws:
-        ws.send_text(json.dumps({"landmarks": [0.0] * 126}))
-        check("frame without hands is skipped", ws.receive_json()["label_tr"] == "El algılanmadı")
-        prediction = None
-        for vector in synthetic_hands(40):
-            ws.send_text(json.dumps({"landmarks": vector}))
-            reply = ws.receive_json()
-            if reply.get("class_id", -1) >= 0:
-                prediction = reply
-                break
-        check("prediction after 32 frames", prediction is not None and prediction["buffer_length"] == 32, prediction)
-        if prediction:
-            gloss = prediction["label_tr"].strip("()?")
-            check("prediction has three candidates", len(prediction["top_predictions"]) == 3)
-            check("prediction carries Turkish spelling", prediction["text_tr"] == restore_turkish(gloss), prediction)
-
-        for word in ("ben", "cay", "icmek"):
-            ws.send_text(json.dumps({"action": "approve", "word": word}))
-            update = ws.receive_json()
-        check("approved glosses form a sentence", update.get("sentence") == "Ben çay içiyorum.", update)
-        check("sentence shows Turkish spelling", update.get("display_words") == ["ben", "çay", "içmek"], update)
-
-    history = client.get("/api/history", headers=U).json()
-    check("history stores approved words", [row["result"] for row in history] == ["icmek", "cay", "ben"], history)
-    check("history shows Turkish spelling", [row["text"] for row in history] == ["içmek", "çay", "ben"], history)
-    check("history confidence is a percentage or '-'",
-          all(row["confidence"] == "-" or row["confidence"].endswith("%") for row in history), history)
-    check("history is per user", client.get("/api/history", headers=A).json() == [])
-    check("summary counts approved words", client.get("/api/me/summary", headers=U).json()["translations"] == 3)
-
-    status = wait_for_226(client)
-    check("226 model ready", status["ready"], status)
     if status["ready"]:
+        with live_socket(client, user_token) as ws:
+            for word in ("ben", "cay", "icmek"):
+                ws.send_text(json.dumps({"action": "approve", "word": word}))
+                update = ws.receive_json()
+            check("approved glosses form a sentence", update.get("sentence") == "Ben çay içiyorum.", update)
+            check("sentence shows Turkish spelling", update.get("display_words") == ["ben", "çay", "içmek"], update)
+
+        history = client.get("/api/history", headers=U).json()
+        check("history stores approved words", [row["result"] for row in history] == ["icmek", "cay", "ben"], history)
+        check("history shows Turkish spelling", [row["text"] for row in history] == ["içmek", "çay", "ben"], history)
+        check("history is per user", client.get("/api/history", headers=A).json() == [])
+        check("summary counts approved words", client.get("/api/me/summary", headers=U).json()["translations"] == 3)
+
         clip = camera_clip(ROOT / "docs" / "videos" / "cay.mp4")
         default_every = backend.LIVE226.detect_every
         backend.LIVE226.reset_timings()
-        with live_socket(client, "/api/predict/live226", user_token) as ws:
-            ws.send_text(json.dumps({"action": "start"}))
-            check("226 recording starts", ws.receive_json().get("type") == "recording")
-            started = time.time()
-            processed = 0
-            for frame in clip:
-                ws.send_text(json.dumps({"image": frame}))
-                processed = ws.receive_json().get("processed", processed)
-            ws.send_text(json.dumps({"action": "end"}))
-            result = ws.receive_json()
-            elapsed = time.time() - started
+        with live_socket(client, user_token) as ws:
+            started_ok, result, processed = record(ws, clip)
+            check("recording starts", started_ok)
             top = result.get("top", [])
             timing = client.get("/api/health").json()["model_226"]
-            print(f"     226 on the cay clip, detection every {default_every} frame(s): "
-                  f"{[(row['gloss'], row['confidence']) for row in top]} | {elapsed:.1f}s for {len(clip)} frames, "
+            print(f"     cay clip, detection every {default_every} frame(s): "
+                  f"{[(row['gloss'], row['confidence']) for row in top]} | "
                   f"detect {timing['avg_detect_ms']} ms, pose {timing['avg_pose_ms']} ms per frame, "
                   f"model {result.get('model_ms')} ms, feedback {result.get('feedback')!r}")
-            check("226 processes every frame", processed == len(clip) == result.get("frames"), (processed, result))
-            check("226 returns three candidates with Turkish spelling",
+            check("every frame is processed", processed == len(clip) == result.get("frames"), (processed, result))
+            check("the cay recording is recognised", bool(top) and top[0]["gloss"] == "cay" and result.get("confident"),
+                  result)
+            check("three candidates with Turkish spelling",
                   len(top) == 3 and all(row["text_tr"] == restore_turkish(row["gloss"]) for row in top), result)
             ws.send_text(json.dumps({"action": "approve", "word": top[0]["gloss"] if top else "cay"}))
             update = ws.receive_json()
-            check("226 approval updates the sentence", update.get("type") == "sentence_update" and len(update["words"]) == 1,
+            check("approval updates the sentence", update.get("type") == "sentence_update" and len(update["words"]) == 1,
                   update)
         rows = client.get("/api/history", headers=U).json()
-        check("226 approval stored as Live226 with its confidence",
-              rows[0]["mode"] == "Live226" and rows[0]["confidence"].endswith("%"), rows[:1])
+        check("approval stored with its confidence", rows[0]["mode"] == "Live226" and rows[0]["confidence"].endswith("%"),
+              rows[:1])
+        check("history confidence is a percentage or '-'",
+              all(row["confidence"] == "-" or row["confidence"].endswith("%") for row in rows), rows)
 
         # The same clip with the other person-detection setting, for comparison
         other_every = 4 if default_every == 1 else 1
         backend.LIVE226.reset_timings()
         backend.LIVE226.detect_every = other_every
-        with live_socket(client, "/api/predict/live226", user_token) as ws:
-            ws.send_text(json.dumps({"action": "start"}))
-            ws.receive_json()
-            started = time.time()
-            for frame in clip:
-                ws.send_text(json.dumps({"image": frame}))
-                ws.receive_json()
-            ws.send_text(json.dumps({"action": "end"}))
-            other = ws.receive_json()
-            other_elapsed = time.time() - started
+        with live_socket(client, user_token) as ws:
+            _, other, _ = record(ws, clip)
         backend.LIVE226.detect_every = default_every
         timing = client.get("/api/health").json()["model_226"]
-        print(f"     226 on the cay clip, detection every {other_every} frame(s): "
-              f"{[(row['gloss'], row['confidence']) for row in other.get('top', [])]} | {other_elapsed:.1f}s, "
+        print(f"     cay clip, detection every {other_every} frame(s): "
+              f"{[(row['gloss'], row['confidence']) for row in other.get('top', [])]} | "
               f"detect {timing['avg_detect_ms']} ms, pose {timing['avg_pose_ms']} ms per frame")
-        check("226 also works with the other detection setting", len(other.get("top", [])) == 3, other)
+        check("the other detection setting also works", len(other.get("top", [])) == 3, other)
 
     client.post("/api/logout", headers=U)
     check("token revoked after logout", client.get("/api/history", headers=U).status_code == 401)

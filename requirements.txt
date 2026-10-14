@@ -7,11 +7,8 @@ websockets==17.2
 # ── ML / CV ───────────────────────────────────────────────
 tensorflow==2.18.1
 keras==3.13.2             # the model files were saved with Keras 3.13.2
-mediapipe==0.10.21
-numpy<2.0
-# mediapipe requires the contrib build of OpenCV; keep both on one version
-opencv-python==4.11.0.86
-opencv-contrib-python==4.11.0.86
+numpy<2.0                 # the accuracy in the model card was measured with NumPy 1.x
+opencv-python-headless==4.11.0.86
 
 # ── 226-class mode ────────────────────────────────────────
 onnxruntime==1.30.0       # runs the RTMW pose and YOLOX person models (signturk_runtime/rtm.py)

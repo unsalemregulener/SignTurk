@@ -4,7 +4,7 @@ Classifies one isolated Turkish Sign Language sign from a clip of 32 RGB
 frames. RTMW whole-body pose estimation gives 75 landmarks per frame, four
 recurrent models read joint, bone, motion, geometry and hand features, and
 their class probabilities are averaged with the weights 0.10 / 0.21 / 0.55 /
-0.14. SignTurk uses it in the 226 mode of the live page.
+0.14. SignTurk's live page uses it.
 
 ## Evaluation
 
@@ -70,7 +70,7 @@ least 0.12 above the second.
 
 ## Files
 
-`python tools/download_models.py --bundle 226` downloads the four Keras
+`python tools/download_models.py` downloads the four Keras
 streams and the two ONNX models (about 660 MB) from the
 [`model-assets-v1`](https://github.com/unsalemregulener/SignTurk/releases/tag/model-assets-v1)
 release and checks their SHA-256. YOLOX and RTMW are Apache-2.0 models from

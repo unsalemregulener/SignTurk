@@ -1,7 +1,7 @@
 """Standalone dev/test server for the text_processing pipeline.
 
 Lets you test the text/LLM pipeline without the heavy ML/CV stack (no
-tensorflow / mediapipe / opencv / torch and no webcam):
+tensorflow / onnxruntime / opencv / torch and no webcam):
 
     pip install fastapi uvicorn pydantic
     python -m text_processing.devserver

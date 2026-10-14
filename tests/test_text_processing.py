@@ -1,7 +1,7 @@
-import json
 import unittest
 from pathlib import Path
 
+from signturk_runtime.config import load_vocabulary
 from text_processing import GrammarCorrector, SignTextPipeline
 from text_processing.lexicon import SIGN_GLOSS_TURKISH, restore_turkish, restore_turkish_words
 
@@ -33,11 +33,10 @@ class GrammarEngineTests(unittest.TestCase):
 class SignLexiconTests(unittest.TestCase):
     def test_covers_every_avatar_and_model_gloss(self):
         landmark_glosses = {p.stem for p in (ROOT / "landmarks").glob("*.json")}
-        labels = json.loads((ROOT / "demo_assets_179" / "label_map.json").read_text(encoding="utf-8"))
-        model_glosses = {entry["TR"] for entry in labels.values()}
+        model_glosses = {entry["gloss"] for entry in load_vocabulary()}
         self.assertEqual(len(landmark_glosses), 226)
         self.assertEqual(set(SIGN_GLOSS_TURKISH), landmark_glosses)
-        self.assertTrue(model_glosses <= landmark_glosses)
+        self.assertEqual(model_glosses, landmark_glosses)
 
     def test_spellings_are_readable_turkish(self):
         for gloss, text in SIGN_GLOSS_TURKISH.items():

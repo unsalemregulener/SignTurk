@@ -52,7 +52,7 @@ python -m unittest discover -s tests -v
 python -m text_processing.eval --check --min-exact 0.98   # rule-based floor
 ```
 
-To try the engine or the API without TensorFlow, MediaPipe or a camera:
+To try the engine or the API without TensorFlow, ONNX Runtime or a camera:
 
 ```bash
 python -m text_processing.demo --words "ben çay içmek"   # Ben çay içiyorum.

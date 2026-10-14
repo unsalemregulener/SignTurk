@@ -1,4 +1,4 @@
-"""Open the live sockets of a running server the way the browser does.
+"""Open the live socket of a running server the way the browser does.
 
 backend_smoke.py talks to the app through FastAPI's test client, which skips
 uvicorn and the websockets package; this check goes through both. CI runs it
@@ -73,25 +73,14 @@ def main() -> int:
     token = post(f"{args.url}/api/login", {"email": email, "password": password})["access_token"]
     check("login over HTTP", bool(token))
 
-    with connect(f"{ws_url}/api/predict/live") as ws:
+    with connect(f"{ws_url}/api/predict/live226") as ws:
         ws.send(json.dumps({"action": "start"}))
         check("socket without a token is closed with 1008", close_code(ws) == 1008)
-
-    rng = np.random.default_rng(0)
-    with connect(f"{ws_url}/api/predict/live") as ws:
-        ws.send(json.dumps({"action": "auth", "token": token}))
-        replies = []
-        for _ in range(32):
-            ws.send(json.dumps({"landmarks": rng.uniform(0.2, 0.8, 126).round(4).tolist()}))
-            replies.append(json.loads(ws.recv(timeout=60)))
-        check("fast-mode socket collects 32 frames", replies[-2].get("buffer_length") == 31, replies[-2])
-        check("fast-mode socket predicts after 32 frames", len(replies[-1].get("top_predictions", [])) == 3,
-              replies[-1])
 
     with connect(f"{ws_url}/api/predict/live226") as ws:
         ws.send(json.dumps({"action": "auth", "token": token}))
         ws.send(json.dumps({"action": "start"}))
-        check("full-mode recording starts", json.loads(ws.recv(timeout=60)).get("type") == "recording")
+        check("recording starts", json.loads(ws.recv(timeout=60)).get("type") == "recording")
         for frame in camera_clip(args.video):
             ws.send(json.dumps({"image": frame}))
             json.loads(ws.recv(timeout=120))
@@ -99,7 +88,7 @@ def main() -> int:
         result = json.loads(ws.recv(timeout=120))
         top = result.get("top", [])
         print("     cay clip:", [(row["gloss"], row["confidence"]) for row in top])
-        check("full mode recognises the cay recording", bool(top) and top[0]["gloss"] == "cay", result)
+        check("the cay recording is recognised", bool(top) and top[0]["gloss"] == "cay", result)
 
     print(f"{len(FAILURES)} failed" if FAILURES else "all socket checks passed")
     return 1 if FAILURES else 0

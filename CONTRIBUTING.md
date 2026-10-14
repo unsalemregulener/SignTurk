@@ -6,7 +6,7 @@ Use Python 3.11.
 
 ```bash
 pip install -r requirements-dev.txt
-python tools/download_models.py --bundle all
+python tools/download_models.py
 ```
 
 ## Conventions
@@ -32,9 +32,8 @@ python tests/backend_smoke.py
 ## Publishing new model weights
 
 1. Upload the file to a new release (for example `model-assets-v2`).
-2. Update its entry in `model-assets.json`: `url`, `bytes` and `sha256`; the
-   `bundle` field is `live` for the fast mode and `226` for the full mode.
-3. Run `python tools/download_models.py --check --bundle all`, then
-   `python tools/download_models.py --bundle all --force`.
-4. Update the models section of the README, and the model card for the full
-   mode, if the classes or the input changed.
+2. Update its entry in `model-assets.json`: `url`, `bytes` and `sha256`.
+3. Run `python tools/download_models.py --check`, then
+   `python tools/download_models.py --force`.
+4. Measure the model with `tools/evaluate_226.py`, and update the models
+   section of the README and the model card.
