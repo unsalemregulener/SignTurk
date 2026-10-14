@@ -608,9 +608,12 @@ const API = {
 };
 window.SIGNTURK_API = API;
 
-// Each sign is recorded as 32 frames at about 12 fps (2.7 seconds).
-const CLIP_FRAMES = 32;
+// A recording is 4 seconds at about 12 fps; the server cuts the sign out of it.
+const CLIP_FRAMES = 48;
 const CLIP_INTERVAL_MS = 83;
+
+function recordFrames(model){ return model?.record_frames || CLIP_FRAMES; }
+function recordSeconds(model){ return Math.round(recordFrames(model) / (model?.camera_fps || 12)); }
 const MODEL_STATES = {ready:"Hazır", loading:"Yükleniyor", idle:"Bekliyor", missing:"Dosyalar eksik", error:"Hata", disabled:"Kapalı"};
 const DEVICE_NAMES = {cuda:"GPU", cpu:"CPU"};
 
@@ -735,7 +738,7 @@ function AuthScreen({onLogin}){
             <p>Türk İşaret Dili için canlı tanıma, kayıtlı geçmiş, sözlük ve 3D animasyon yönetimi tek panelde.</p>
             <div className="auth-stats">
               <div className="auth-stat"><strong>226</strong><span>işaret</span></div>
-              <div className="auth-stat"><strong>32</strong><span>kare kayıt</span></div>
+              <div className="auth-stat"><strong>4 sn</strong><span>kayıt</span></div>
               <div className="auth-stat"><strong>94%</strong><span>AUTSL doğruluk</span></div>
             </div>
           </div>
@@ -837,7 +840,7 @@ function Shell({user, setUser}){
           <div className="top-actions">
             <StatusChip ok={modelOk(health?.model_226)}>Model</StatusChip>
             <span className="chip"><Icon name="Cpu" size={14}/> {DEVICE_NAMES[health?.model_226?.device] || "-"}</span>
-            <span className="chip"><Icon name="Layers" size={14}/> {health?.model_226?.frame_count || CLIP_FRAMES} kare</span>
+            <span className="chip"><Icon name="Layers" size={14}/> {recordSeconds(health?.model_226)} sn kayıt</span>
           </div>
         </header>
         <div className="content">{page}</div>
@@ -872,7 +875,7 @@ function Dashboard({navigate, health}){
       <div className="grid cols-4">
         <Metric label="Model" value={MODEL_STATES[model?.state] || "Bekliyor"} sub={`${model?.num_classes || 226} işaret`} icon="Cpu" ok={modelOk(model)}/>
         <Metric label="Cihaz" value={DEVICE_NAMES[model?.device] || "-"} sub={model?.avg_frame_ms != null ? `${model.avg_frame_ms} ms / kare` : "RTMW ve YOLOX"} icon="Activity" ok={modelOk(model)}/>
-        <Metric label="Kayıt" value={`${model?.frame_count || CLIP_FRAMES} kare`} sub="yaklaşık 2,7 sn" icon="Layers" ok/>
+        <Metric label="Kayıt" value={`${recordSeconds(model)} sn`} sub={`${recordFrames(model)} kare, işaret kırpılır`} icon="Layers" ok/>
         <Metric label="Onay eşiği" value={percent(model?.thresholds?.top1 ?? .7)} sub="ilk tahmin için" icon="Gauge" ok/>
       </div>
       <div className="grid cols-2">
@@ -927,6 +930,7 @@ function LivePage(){
   const [health] = useHealth(true);
   const model = health?.model_226;
   const ready = !!model?.ready;
+  const clipFrames = recordFrames(model);
   useEffect(() => {
     apiFetch(API.endpoints.settings).then(s => {
       setSpeech(!!s?.tts_enabled);
@@ -1033,7 +1037,7 @@ function LivePage(){
           sent += 1;
           setClipProgress(prev => ({...prev, sent}));
         }
-        if (sent >= CLIP_FRAMES){
+        if (sent >= clipFrames){
           clearInterval(clipTimerRef.current);
           clipTimerRef.current = null;
           sendAction({action:"end"});
@@ -1043,7 +1047,7 @@ function LivePage(){
       }, CLIP_INTERVAL_MS);
     };
     clipTimerRef.current = setTimeout(tick, 1000);
-  }, [clipState, captureFrame, sendAction]);
+  }, [clipState, clipFrames, captureFrame, sendAction]);
 
   const startLive = useCallback(async () => {
     setStarting(true);
@@ -1134,16 +1138,17 @@ function LivePage(){
   const hasPrediction = top.length > 0;
   const confident = !!result?.confident;
   const confPct = hasPrediction ? Math.round(Number(top[0].confidence || 0) * 100) : 0;
-  const progressPct = Math.round((clipProgress.processed / CLIP_FRAMES) * 100);
+  const progressPct = Math.round((clipProgress.processed / clipFrames) * 100);
   const clipLabel = {
     countdown: "Hazırlanın",
-    recording: `Kayıt ${clipProgress.sent}/${CLIP_FRAMES}`,
-    processing: `İşleniyor ${clipProgress.processed}/${CLIP_FRAMES}`,
+    recording: `Kayıt ${clipProgress.sent}/${clipFrames}`,
+    processing: `İşleniyor ${clipProgress.processed}/${clipFrames}`,
   }[clipState];
   const displayLabel = clipLabel
     || (hasPrediction ? (confident ? top[0].text_tr : `(${top[0].text_tr}?)`) : (running ? "Kayda hazır" : "Hazır"));
+  const signFrames = result?.sign_frames ? result.sign_frames[1] - result.sign_frames[0] + 1 : null;
   const displaySub = hasPrediction
-    ? `AUTSL ${top[0].class_id} · ${result.frames} kare · model ${Math.round(result.model_ms)} ms`
+    ? `AUTSL ${top[0].class_id} · ${signFrames ? `işaret ${signFrames}/${result.frames} kare` : `${result.frames} kare`} · model ${Math.round(result.model_ms)} ms`
     : "226 işaret · RTMW";
   const resultStatus = hasPrediction ? `Son tahmin ekranda · ${status}` : status;
   const unavailable = model && !ready
@@ -1158,7 +1163,7 @@ function LivePage(){
           </div>
           <div className="camera-meta">
             <span className={`dark-chip ${running ? "ok" : ""}`}><Icon name={running ? "Wifi" : "WifiOff"} size={14}/> {running ? "Açık" : "Kapalı"}</span>
-            <span className="dark-chip"><Icon name="Layers" size={14}/> {clipProgress.processed}/{CLIP_FRAMES}</span>
+            <span className="dark-chip"><Icon name="Layers" size={14}/> {clipProgress.processed}/{clipFrames}</span>
           </div>
         </div>
         <div className="video-wrap">
@@ -1479,7 +1484,7 @@ function AdminModel(){
   const items = [
     ["Model", MODEL_STATES[model.state] || "-", model.message || `${model.num_classes ?? 226} işaret`, modelOk(model)],
     ["Cihaz", DEVICE_NAMES[model.device] || "-", "RTMW ve YOLOX"],
-    ["Kayıt", `${model.frame_count ?? 32} kare`, "modele giden kare sayısı"],
+    ["Kayıt", `${recordSeconds(model)} sn`, `${recordFrames(model)} kare; işaretten ${model.frame_count ?? 32} kare modele gider`],
     ["Kare süresi", ms(model.avg_frame_ms), "tespit ve poz, kare başına"],
     ["Kişi tespiti", ms(model.avg_detect_ms), `${model.detect_every ?? 1} karede bir`],
     ["Poz", ms(model.avg_pose_ms), "kare başına RTMW"],

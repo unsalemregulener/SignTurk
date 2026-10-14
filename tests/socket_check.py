@@ -15,7 +15,6 @@ import sys
 import urllib.request
 
 import cv2
-import numpy as np
 from websockets.exceptions import ConnectionClosed
 from websockets.sync.client import connect
 
@@ -35,8 +34,8 @@ def post(url, payload):
         return json.loads(response.read())
 
 
-def camera_clip(path, count=32):
-    """`count` frames of the recorded camera panel, unmirrored, as JPEG data URLs (see backend_smoke.py)."""
+def camera_recording(path, seconds=4.0, fps=12):
+    """`seconds` of the recorded camera panel at `fps`, unmirrored, as JPEG data URLs (see backend_smoke.py)."""
     capture = cv2.VideoCapture(path)
     frames = []
     while True:
@@ -45,10 +44,9 @@ def camera_clip(path, count=32):
             break
         frames.append(cv2.flip(frame[222:612, 256:882], 1))
     capture.release()
-    frames = frames[:max(int(len(frames) * 0.55), 1)]
     clip = []
-    for index in np.linspace(0, len(frames) - 1, count).round().astype(int):
-        ok, jpeg = cv2.imencode(".jpg", frames[index], [cv2.IMWRITE_JPEG_QUALITY, 85])
+    for index in range(int(round(seconds * fps))):
+        ok, jpeg = cv2.imencode(".jpg", frames[int(round(index * 30 / fps))], [cv2.IMWRITE_JPEG_QUALITY, 85])
         clip.append("data:image/jpeg;base64," + base64.b64encode(jpeg.tobytes()).decode("ascii"))
     return clip
 
@@ -81,7 +79,7 @@ def main() -> int:
         ws.send(json.dumps({"action": "auth", "token": token}))
         ws.send(json.dumps({"action": "start"}))
         check("recording starts", json.loads(ws.recv(timeout=60)).get("type") == "recording")
-        for frame in camera_clip(args.video):
+        for frame in camera_recording(args.video):
             ws.send(json.dumps({"image": frame}))
             json.loads(ws.recv(timeout=120))
         ws.send(json.dumps({"action": "end"}))
