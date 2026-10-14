@@ -20,7 +20,7 @@ import numpy as np
 
 from signturk_runtime.config import load_config, load_vocabulary, missing_files
 from signturk_runtime.features import build_feature_bundle, hand_motion
-from signturk_runtime.pose_quality import evaluate_pose_quality
+from signturk_runtime.pose_quality import evaluate_framing
 from signturk_runtime.segment import resample, sign_clip
 from text_processing.lexicon import restore_turkish
 
@@ -151,9 +151,15 @@ class Live226:
         self.pose_ms.append(getattr(self.extractor, "last_pose_ms", 0.0))
         return result
 
-    def predict(self, clip: list, cut: bool = True) -> dict:
+    @staticmethod
+    def framing(landmarks: np.ndarray, frame_shape) -> dict:
+        """Whether the camera sees the signing space in this frame, with a hint for the user."""
+        return evaluate_framing(landmarks, frame_shape).as_dict()
+
+    def predict(self, clip: list, cut: bool = True, frame_shape=None) -> dict:
         """Top-3 for per-frame landmarks: a recording, read from the sign's span when one is found,
-        or with `cut=False` a sign the Segmenter has already cut out."""
+        or with `cut=False` a sign the Segmenter has already cut out. `frame_shape` is the
+        camera frame's, for the framing hint."""
         if cut:
             window, span = sign_clip(np.stack(clip), CAMERA_FPS, self.frame_count)
         else:
@@ -174,18 +180,19 @@ class Live226:
         margin = top[0]["confidence"] - top[1]["confidence"]
         thresholds = self.config["thresholds"]
         motion = hand_motion(window)
-        quality = evaluate_pose_quality(window[len(window) // 2])
+        framing = evaluate_framing(window[len(window) // 2], frame_shape)
         feedback = None
         if motion < MIN_HAND_MOTION:
             feedback = "Hareket algılanmadı"
-        elif not quality.ok:
-            feedback = quality.feedback
+        elif not framing.ok:
+            feedback = framing.hint
         return {
             "top": top,
             "confident": top[0]["confidence"] >= thresholds["top1"] and margin >= thresholds["margin"],
             "margin": round(margin, 4),
             "hand_motion": round(motion, 5),
             "feedback": feedback,
+            "framing": framing.as_dict(),
             "sign_frames": list(span) if span else None,
             "model_ms": round(latency_ms, 1),
         }

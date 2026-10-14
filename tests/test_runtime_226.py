@@ -12,11 +12,12 @@ from signturk_runtime.features import (
     WHOLEBODY_RIGHT_HAND_START,
     body_center_normalize,
     build_feature_bundle,
+    frame_bounds,
     hand_motion,
     sample_indices,
     wholebody_to_landmarks,
 )
-from signturk_runtime.pose_quality import evaluate_pose_quality
+from signturk_runtime.pose_quality import evaluate_framing
 from text_processing.lexicon import SIGN_GLOSS_TURKISH
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,10 +54,23 @@ class LandmarkTests(unittest.TestCase):
         keypoints, scores, shape = person()
         landmarks = wholebody_to_landmarks(keypoints, scores, shape)
         self.assertEqual(landmarks.shape, (75, 4))
-        np.testing.assert_allclose(landmarks[11, :2], (260 / 640, 220 / 480))   # left shoulder
-        np.testing.assert_allclose(landmarks[LEFT_HAND_NODES[0], :2], (240 / 640, 300 / 480))
-        np.testing.assert_allclose(landmarks[RIGHT_HAND_NODES[0], :2], (400 / 640, 300 / 480))
+        # 640x480: both axes divided by 640, the 480 rows centred (80 px above)
+        np.testing.assert_allclose(landmarks[11, :2], (260 / 640, 300 / 640))   # left shoulder
+        np.testing.assert_allclose(landmarks[LEFT_HAND_NODES[0], :2], (240 / 640, 380 / 640))
+        np.testing.assert_allclose(landmarks[RIGHT_HAND_NODES[0], :2], (400 / 640, 380 / 640))
         self.assertTrue(np.all(landmarks[:, 2] == 0))
+
+    def test_square_frames_are_divided_by_their_side(self):
+        keypoints, scores, _ = person()
+        landmarks = wholebody_to_landmarks(keypoints, scores, (640, 640, 3))
+        np.testing.assert_allclose(landmarks[11, :2], (260 / 640, 220 / 640))
+
+    def test_wide_frames_keep_x_and_y_on_one_scale(self):
+        keypoints, scores, _ = person()
+        landmarks = wholebody_to_landmarks(keypoints, scores, (400, 640, 3))
+        shoulder_to_wrist = landmarks[15, :2] - landmarks[11, :2]   # (-10, 110) px
+        np.testing.assert_allclose(shoulder_to_wrist, (-10 / 640, 110 / 640), atol=1e-6)
+        self.assertEqual(frame_bounds((400, 640, 3)), (0.0, 120 / 640, 1.0, 520 / 640))
 
     def test_low_scores_stay_empty_and_best_person_wins(self):
         keypoints, scores, shape = person()
@@ -92,9 +106,22 @@ class FeatureTests(unittest.TestCase):
         self.assertGreater(hand_motion(self.clip), 0.0)
         self.assertEqual(hand_motion(np.repeat(self.clip[:1], 5, axis=0)), 0.0)
 
-    def test_framing_feedback(self):
-        self.assertTrue(evaluate_pose_quality(self.clip[16]).ok)
-        self.assertEqual(evaluate_pose_quality(np.zeros((75, 4))).feedback, "Kameraya geçin")
+    def test_framing_with_room_for_the_hands(self):
+        framing = evaluate_framing(self.clip[16], (480, 640, 3))
+        self.assertTrue(framing.ok, framing)
+        self.assertGreater(framing.space_below, 2.0)
+        self.assertEqual(evaluate_framing(np.zeros((75, 4))).hint, "Kameraya geçin")
+
+    def test_framing_too_close_to_the_camera(self):
+        keypoints, scores, shape = person()
+        keypoints[[5, 6], 1] = 430                         # shoulders near the bottom edge
+        keypoints[5, 0], keypoints[6, 0] = 220, 420       # and wide
+        framing = evaluate_framing(wholebody_to_landmarks(keypoints, scores, shape), shape)
+        self.assertFalse(framing.ok)
+        self.assertEqual(framing.hint, "Biraz geri çekilin")
+        keypoints[5, 0], keypoints[6, 0] = 290, 350       # narrow shoulders, low in the frame
+        framing = evaluate_framing(wholebody_to_landmarks(keypoints, scores, shape), shape)
+        self.assertEqual(framing.hint, "Kamerayı biraz aşağı eğin")
 
 
 class VocabularyTests(unittest.TestCase):

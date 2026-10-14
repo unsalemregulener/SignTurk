@@ -217,6 +217,11 @@ with TestClient(backend.app) as client:
         default_every = backend.LIVE226.detect_every
         backend.LIVE226.reset_timings()
         with live_socket(client, user_token) as ws:
+            # The demo video was recorded close to the camera: the frame ends just below the shoulders
+            ws.send_text(json.dumps({"image": clip[0], "preview": True}))
+            framing = ws.receive_json()
+            check("a preview frame gets a framing check", framing.get("type") == "framing" and "ok" in framing, framing)
+            check("a close camera is told to move back", framing.get("hint") == "Biraz geri çekilin", framing)
             started_ok, result, processed = record(ws, clip)
             check("recording starts", started_ok)
             top = result.get("top", [])

@@ -4,7 +4,7 @@ Each frame becomes 75 landmarks with (x, y, z, confidence): 33 body slots in
 MediaPipe's pose layout (only the 17 COCO body points are filled, z stays 0),
 then 21 points for the left hand and 21 for the right hand, as named by
 COCO-WholeBody (the signer's own left and right). Coordinates are normalised
-to the image size.
+to the longer side of the image, which keeps x and y on the same scale.
 
 A clip of 32 frames turns into five skeleton streams (joint, bone, their
 frame-to-frame motion, extra geometry) and three hand streams.
@@ -71,14 +71,28 @@ def sample_indices(total_frames: int, target_frames: int) -> np.ndarray:
     return np.asarray(indices, dtype=np.int64)
 
 
+def frame_bounds(image_shape) -> tuple:
+    """(left, top, right, bottom) of an image in landmark coordinates."""
+    height, width = int(image_shape[0]), int(image_shape[1])
+    size = float(max(height, width, 1))
+    left, top = (size - width) / 2.0 / size, (size - height) / 2.0 / size
+    return left, top, 1.0 - left, 1.0 - top
+
+
 def wholebody_to_landmarks(keypoints, scores, image_shape, keypoint_threshold: float = 0.05) -> np.ndarray:
     """(75, 4) landmarks from RTMW whole-body output for one frame.
 
     `keypoints` is (people, 133, 2) in pixels or (133, 2); with several people
     the one with the highest mean score is kept. Points below the threshold
     stay zero.
+
+    Both axes are divided by the longer side of the image, with the shorter
+    side centred, as if the frame were padded to a square. The AUTSL videos
+    the model learnt from are square; dividing x and y by different sides would
+    stretch a 16:10 webcam frame vertically.
     """
     height, width = int(image_shape[0]), int(image_shape[1])
+    size = float(max(height, width, 1))
     landmarks = np.zeros((TOTAL_LANDMARKS, LANDMARK_DIM), dtype=np.float32)
     keypoints = np.asarray(keypoints, dtype=np.float32)
     scores = np.asarray(scores, dtype=np.float32)
@@ -95,8 +109,8 @@ def wholebody_to_landmarks(keypoints, scores, image_shape, keypoint_threshold: f
         scores = np.ones(keypoints.shape[0], dtype=np.float32)
 
     xy = keypoints[:, :2].copy()
-    xy[:, 0] = np.clip(xy[:, 0] / max(width, 1), 0.0, 1.0)
-    xy[:, 1] = np.clip(xy[:, 1] / max(height, 1), 0.0, 1.0)
+    xy[:, 0] = np.clip((xy[:, 0] + (size - width) / 2.0) / size, 0.0, 1.0)
+    xy[:, 1] = np.clip((xy[:, 1] + (size - height) / 2.0) / size, 0.0, 1.0)
 
     def copy(source: int, target: int) -> None:
         if source < len(scores) and scores[source] >= keypoint_threshold:
