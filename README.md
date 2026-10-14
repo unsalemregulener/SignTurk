@@ -1,16 +1,20 @@
 # SignTurk
 
-Real-time Turkish Sign Language (TİD) recognition in the browser. Signs
-recorded with a webcam are recognised one at a time, approved words are turned
-into a Turkish sentence, and a 3D avatar can play signs back. The interface and
-API messages are in Turkish.
+Real-time Turkish Sign Language (TİD) recognition in the browser. Signs made
+in front of a webcam are recognised one at a time, from a short recording or
+hands-free, approved words are turned into a Turkish sentence, and a 3D avatar
+can play signs back. The interface and API messages are in Turkish.
 
 [![Live recognition of the sign "çay" (tea)](docs/images/cay-preview.gif)](docs/videos/cay.mp4)
 
 - **226 signs:** every sign in AUTSL, recognised from RTMW whole-body
   landmarks by a four-stream ensemble: 94.39% top-1 on the AUTSL test split.
-- **Approval step:** a prediction enters the sentence only after the user
-  accepts it, so a wrong guess can be rejected first.
+- **Approval step:** by default a prediction enters the sentence only after
+  the user accepts it, so a wrong guess can be rejected first.
+- **Hands-free mode:** with a GPU the page can watch the camera without a
+  record button. Each sign is cut out of the stream once the hands come back
+  down and waits for approval like a recorded one; the user can let confident
+  results into the sentence automatically.
 - **Turkish sentence engine:** rule-based morphology turns glosses such as
   `ben çay içmek` into `Ben çay içiyorum.`
 - **3D avatar:** 226 recorded landmark sequences replayed on a rigged
@@ -23,7 +27,8 @@ API messages are in Turkish.
 
 ## Live recognition
 
-On the **Canlı Çeviri** page each sign is recorded on its own.
+On the **Canlı Çeviri** page signs are read one at a time. In the **Kayıt**
+mode each sign is recorded on its own:
 
 1. The user presses **İşareti kaydet**. After a 3-2-1 countdown the browser
    captures four seconds of unmirrored frames at about 12 fps (48 frames) and
@@ -33,11 +38,10 @@ On the **Canlı Çeviri** page each sign is recorded on its own.
    keypoints it keeps 17 body points and 21 points per hand: 75 landmarks with
    the signer's own left and right.
 3. When the recording is complete the server cuts the sign out of it, the way
-   AUTSL clips are cut: from where the higher wrist leaves its rest height to
-   where it is back, with 0.15 s of rest on each side. The cut is resampled to
-   32 frames, and the landmarks are centred between the shoulders, scaled by
-   the shoulder width and turned into joint, bone, motion, geometry and hand
-   features.
+   AUTSL clips are cut: from where the higher wrist starts to rise from its
+   rest height to where it is back down. The cut is resampled to 32 frames,
+   and the landmarks are centred between the shoulders, scaled by the shoulder
+   width and turned into joint, bone, motion, geometry and hand features.
 4. Four Keras models score the 226 signs and their probabilities are averaged
    with the weights 0.10, 0.21, 0.55 and 0.14.
 5. The page shows the top three. The first becomes the approval candidate when
@@ -47,6 +51,37 @@ On the **Canlı Çeviri** page each sign is recorded on its own.
 
 Approved words are saved to the user's history, and the sentence engine
 rebuilds the sentence from all approved words.
+
+In the **Sürekli** (hands-free) mode the browser keeps sending frames and the
+server watches the higher wrist. When the hands rise above their rest height
+and come back down for 0.4 s, the sign is cut out as in step 3, scored and
+offered for approval like a recording. With **Otomatik onay** switched on, a
+result that passes the thresholds goes straight into the sentence instead,
+and **Geri al** removes it. Every frame has to be processed within the
+camera's 83 ms, so the mode is offered when frames are fast enough, in
+practice on a GPU.
+
+### Measured on AUTSL
+
+[`tools/evaluate_recording.py`](tools/evaluate_recording.py) turns the 3,742
+clips of AUTSL's test split into what the live page sees: frames at 12 fps,
+landmarks with the detector on every fourth frame, and the signer at rest
+before and after the sign.
+
+| Test split | Top-1 |
+| --- | ---: |
+| The clip alone at 12 fps | 93.80% |
+| The earlier 2.7 s recording, sign starting within 0.7 s | 89.87–91.15% |
+| 4 s recording read whole, sign starting within 2 s | 76.27–78.81% |
+| 4 s recording cut, sign starting within 2 s | 92.28–92.94% |
+
+In streams of five signs by one signer, with 0.3–1.5 s of rest between them,
+the hands-free mode cut out 94.5% of the signs and read 92.8% of those
+correctly; 5.3 cuts per 100 signs matched no sign. Of the results confident
+enough to be offered, 98.0% were right, and a sign was cut 0.17 s (median)
+after its clip ended. The settings were chosen on the validation split; the
+[model card](research/model_226/MODEL_CARD.md#recordings-and-the-hands-free-mode)
+has both splits.
 
 ## Model
 
@@ -126,6 +161,7 @@ Settings are read from the environment or from a `.env` file
 | `SIGNTURK_ENABLE_226` | `1` | `0` skips loading the model, for example to work on the other pages |
 | `SIGNTURK_226_DETECT_EVERY` | `4` | run the person detector on every Nth frame of a recording and reuse its box in between |
 | `SIGNTURK_226_DEVICE` | `auto` | `cuda` or `cpu`; `auto` uses CUDA when ONNX Runtime has it |
+| `SIGNTURK_CONTINUOUS` | `auto` | hands-free mode: `auto` offers it while a frame takes at most 60 ms (on a GPU before the first frame), `on` always, `off` never |
 | `HF_TOKEN`, `SIGNAI_*` | off | optional ML layer for the sentence engine, see [`text_processing`](text_processing/README.md) |
 
 There are no built-in accounts. Without the admin variables the application
@@ -157,6 +193,10 @@ which keeps it out of URLs and access logs.
 
 The live socket also accepts `approve` (optionally with a `word`), `reject`,
 `undo` and `reset_sentence` actions and answers with `sentence_update`.
+`{"action": "continuous"}` switches it to the hands-free mode (`"on": false`
+switches back, `"auto_approve": true` approves confident results): every frame
+is answered with `{"type": "watching", "state": "waiting" | "signing" |
+"reading"}`, and every sign cut out of the stream with a `result`.
 
 ## Project layout
 
@@ -197,14 +237,18 @@ included. The test split takes about 75 minutes on an RTX 5070 Ti:
 python tools/evaluate_226.py --videos AUTSL/test --labels AUTSL/test/ground_truth.csv
 ```
 
-With `--cache-landmarks DIR` it saves the landmarks of every frame instead,
-and `tools/evaluate_recording.py --cache DIR` turns the clips into four-second
+With `--cache-landmarks DIR` it saves the landmarks of every frame instead
+(`--cache-fps 12` keeps the frames the live page would send), and
+`tools/evaluate_recording.py --cache DIR` turns the clips into four-second
 recordings with rest around the sign and compares the model's input taken
-from the whole recording and from the cut.
+from the whole recording and from the cut; `--streams` measures the
+hands-free mode. The results are in [Measured on AUTSL](#measured-on-autsl).
 
 ## Scope
 
-- SignTurk recognises isolated signs, one at a time.
+- SignTurk recognises isolated signs, one at a time. In the hands-free mode
+  the hands have to come back down for about half a second between signs;
+  signs that run into each other are read as one.
 - A [GPU](#gpu) keeps the live page responsive; on a CPU a recorded sign takes
   a few seconds to process.
 - The sentence engine is rule-based and covers common sentence patterns.

@@ -6,8 +6,9 @@
 
 Every AUTSL clip is turned into what the live page would record: its frames
 at 12 per second, with the signer at rest for a while before and after the
-sign (the clip's first and last frames, played back and forth). The table
-compares the model's input taken three ways:
+sign (the clip's first and last frame held). Neighbouring frames are not
+used for that rest: at 12 fps the second-to-last frame is often still on its
+way down. The table compares the model's input taken three ways:
 
 - autsl: 32 frames of the original 30 fps clip, as in the model card (only
   when the cache holds every frame, not with `--cache-fps 12`);
@@ -17,6 +18,12 @@ compares the model's input taken three ways:
 `--grid` tries other span settings on the recordings and prints one line
 per setting; choose them on the validation split, then run the test split
 once.
+
+`--streams` measures the hands-free mode instead: clips of one signer are
+joined into streams of five signs with 0.3-1.5 s of rest between them, and
+signturk_runtime.segment.Segmenter reads each stream frame by frame. A found
+sign counts when it covers at least half of a true sign and a true sign at
+least half of it.
 """
 
 import argparse
@@ -24,6 +31,7 @@ import csv
 import itertools
 import json
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -41,7 +49,6 @@ CAMERA_FPS = 12.0
 FRAMES = 32
 OLD_RECORDING = 32        # frames the live page recorded before
 RECORDING = 48            # 4 seconds at 12 fps
-REST_SECONDS = 0.1        # the start and end of an AUTSL clip that are surely at rest
 
 
 def read_labels(path: Path) -> dict:
@@ -56,13 +63,8 @@ def camera_frames(clip: np.ndarray, fps: float = CAMERA_FPS) -> np.ndarray:
 
 
 def rest(clip: np.ndarray, count: int, at_start: bool) -> np.ndarray:
-    """`count` frames of the signer at rest, from the clip's first or last frames played back and forth."""
-    still_frames = max(2, int(round(REST_SECONDS * SOURCE_FPS)))
-    still = clip[:still_frames] if at_start else clip[-still_frames:][::-1]
-    cycle = np.concatenate([still, still[-2:0:-1]]) if len(still) > 2 else still
-    order = np.resize(np.arange(len(cycle)), count)
-    frames = cycle[order]
-    return frames[::-1] if at_start else frames
+    """`count` frames of the signer at rest: the clip's first or last frame held."""
+    return np.repeat(clip[:1] if at_start else clip[-1:], count, axis=0)
 
 
 def recording(clip: np.ndarray, lead: int, length: int) -> np.ndarray:
@@ -79,8 +81,11 @@ def whole(frames: np.ndarray) -> np.ndarray:
     return frames[sample_indices(len(frames), FRAMES)]
 
 
+CUT = {}                  # span settings for the table and the streams (--margin, --away)
+
+
 def cut(frames: np.ndarray, **options) -> np.ndarray:
-    return segment.sign_clip(frames, CAMERA_FPS, FRAMES, **options)[0]
+    return segment.sign_clip(frames, CAMERA_FPS, FRAMES, **{**CUT, **options})[0]
 
 
 class Scorer:
@@ -144,14 +149,89 @@ def grid(scorer: Scorer, clips: list, truth: np.ndarray) -> int:
     return 0
 
 
+def signer_streams(clips: list, samples: list, per_stream: int = 5, seed: int = 0) -> list:
+    """Streams of one signer's clips with rest between them: (frames, [(first, last, clip index)])."""
+    rng = np.random.default_rng(seed)
+    by_signer = defaultdict(list)
+    for index, sample in enumerate(samples):
+        by_signer[sample.split("_")[0]].append(index)
+    streams = []
+    for signer in sorted(by_signer):
+        order = rng.permutation(by_signer[signer])
+        for start in range(0, len(order), per_stream):
+            parts, signs, length = [], [], 0
+            for index in order[start:start + per_stream]:
+                gap = rest(clips[index], int(rng.uniform(0.3, 1.5) * CAMERA_FPS), True)
+                camera = camera_frames(clips[index])
+                signs.append((length + len(gap), length + len(gap) + len(camera) - 1, int(index)))
+                parts += [gap, camera]
+                length += len(gap) + len(camera)
+            parts.append(rest(clips[order[min(start + per_stream, len(order)) - 1]], int(CAMERA_FPS), False))
+            streams.append((np.concatenate(parts), signs))
+    return streams
+
+
+def matches(found: tuple, true: tuple) -> bool:
+    overlap = min(found[1], true[1]) - max(found[0], true[0]) + 1
+    return overlap >= 0.5 * (true[1] - true[0] + 1) and overlap >= 0.5 * (found[1] - found[0] + 1)
+
+
+def evaluate_streams(scorer: Scorer, clips: list, samples: list, truth: np.ndarray) -> int:
+    streams = signer_streams(clips, samples)
+    total = sum(len(signs) for _, signs in streams)
+    print(f"{len(streams)} streams, {total} signs, {sum(len(f) for f, _ in streams) / CAMERA_FPS / 60:.0f} min")
+    print(f"{'settle':>7}{'found':>8}{'extra':>8}{'right':>8}{'read':>8}{'offered':>9}{'o.right':>9}{'delay':>8}")
+    for settle in (0.25, 0.4, 0.6):
+        windows, found, delays = [], [], []
+        for number, (frames, _) in enumerate(streams):
+            segmenter = segment.Segmenter(CAMERA_FPS, settle_seconds=settle, **CUT)
+            for position, frame in enumerate(frames):
+                cut_out = segmenter.push(frame)
+                if cut_out is not None:
+                    windows.append(segment.resample(cut_out[0], FRAMES))
+                    found.append((number, cut_out[1], position))
+        probabilities = scorer.probabilities(windows) if windows else np.zeros((0, len(scorer.ids)))
+        order = np.argsort(-probabilities, axis=1)
+        thresholds = scorer.config["thresholds"]
+        hit, right, offered, offered_right = 0, 0, 0, 0
+        used = set()
+        for (number, span, position), row, probability in zip(found, order, probabilities):
+            first, second = probability[row[0]], probability[row[1]]
+            confident = first >= thresholds["top1"] and first - second >= thresholds["margin"]
+            offered += confident
+            for true_first, true_last, index in streams[number][1]:
+                if (number, index) not in used and matches(span, (true_first, true_last)):
+                    used.add((number, index))
+                    hit += 1
+                    correct = scorer.ids[row[0]] == truth[index]
+                    right += correct
+                    offered_right += confident and correct
+                    delays.append((position - true_last) / CAMERA_FPS)
+                    break
+        print(f"{settle:>6.2f}s{hit / total:>8.1%}{(len(found) - hit) / total:>8.1%}{right / max(hit, 1):>8.1%}"
+              f"{right / total:>8.1%}{offered / max(len(found), 1):>9.1%}{offered_right / max(offered, 1):>9.1%}"
+              f"{np.median(delays) if delays else 0:>7.2f}s", flush=True)
+    print("found: true signs cut out; extra: cuts that match no sign, per true sign; right: of the found signs, "
+          "top-1 correct; read: found and correct; offered: confident cuts; delay: median seconds from the "
+          "end of the clip to the cut")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--cache", type=Path, required=True, help="folder of <sample>.npy landmarks")
     parser.add_argument("--labels", type=Path, required=True, help="CSV of <sample>,<AUTSL class id>")
     parser.add_argument("--limit", type=int, help="use an evenly spread subset of this many clips")
     parser.add_argument("--grid", action="store_true", help="try span settings instead of the table")
+    parser.add_argument("--streams", action="store_true", help="measure the hands-free mode instead of the table")
+    parser.add_argument("--margin", type=float, help=f"seconds of rest kept around a cut (default {segment.MARGIN_SECONDS})")
+    parser.add_argument("--away", type=float, help=f"band above rest that still counts as away (default {segment.AWAY})")
     parser.add_argument("--out", type=Path, help="write the table as JSON")
     args = parser.parse_args()
+    if args.margin is not None:
+        CUT["margin_seconds"] = args.margin
+    if args.away is not None:
+        CUT["away"] = args.away
 
     global SOURCE_FPS
     info = args.cache / "cache.json"
@@ -171,6 +251,8 @@ def main() -> int:
 
     if args.grid:
         return grid(scorer, clips, truth)
+    if args.streams:
+        return evaluate_streams(scorer, clips, samples, truth)
 
     rows = {}
     if SOURCE_FPS == 30:

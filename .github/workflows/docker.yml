@@ -20,7 +20,8 @@ jobs:
       - name: Build
         run: docker build -t signturk:ci .
       - name: Start
-        run: docker run -d --name signturk -p 8000:8000 signturk:ci
+        # The runner has no GPU, so the hands-free mode is switched on to be tested
+        run: docker run -d --name signturk -p 8000:8000 -e SIGNTURK_CONTINUOUS=on signturk:ci
       - name: Wait until the model is loaded
         run: |
           for attempt in $(seq 1 120); do

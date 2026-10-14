@@ -10,8 +10,15 @@ shoulder line. Its rest height is the lowest position in the recording. The
 sign is where the wrist is clearly above it (`RAISED`). From there the cut
 follows the hands back to rest on both sides: through every frame that is
 still well above rest (`AWAY`) or lower than the frame before it, so a rest
-height that wobbles on a webcam does not stretch the cut. A short margin of
-rest is kept, as in AUTSL.
+height that wobbles on a webcam does not stretch the cut.
+
+The settings were chosen with tools/evaluate_recording.py on AUTSL's
+validation split. RAISED from 0.3 to 0.6 and AWAY from 0.25 to 0.4 cut the
+same frames there; a margin of extra rest around the cut cost accuracy, so
+none is kept. AWAY is as wide as RAISED because signers do not always come
+back to the rest height they started from: with a narrower band such hands
+never counted as back, and in the hands-free mode the next sign ran into
+this one.
 """
 
 from __future__ import annotations
@@ -26,8 +33,8 @@ LEFT_WRIST, RIGHT_WRIST = 15, 16
 LEFT_SHOULDER, RIGHT_SHOULDER = 11, 12
 
 RAISED = 0.40     # shoulder widths above rest: the hands are signing
-AWAY = 0.25       # shoulder widths above rest: the hands are not back yet
-MARGIN_SECONDS = 0.15
+AWAY = 0.40       # shoulder widths above rest: the hands are not back yet
+MARGIN_SECONDS = 0.0    # extra rest kept on each side of the cut
 MIN_REST = 0.6    # if even the lowest wrist position is higher, the hands never rested
 
 
@@ -111,3 +118,67 @@ def sign_clip(landmarks: np.ndarray, fps: float, count: int, **span_options) -> 
     first, last = span if span else (0, len(arr) - 1)
     return resample(arr[first:last + 1], count), span
 
+
+class Segmenter:
+    """Cuts signs out of a stream of frames, for the hands-free mode.
+
+    A sign is over once the hands have been back at rest for `settle_seconds`;
+    it is then cut with `active_span`, like a recording. While nobody signs,
+    only the last `keep_seconds` are kept, which also give the rest height. A
+    sign that goes on for `max_seconds` is cut where it is, and the next one
+    is only looked for after the hands have rested.
+    """
+
+    def __init__(self, fps: float, settle_seconds: float = 0.4, keep_seconds: float = 2.0,
+                 max_seconds: float = 8.0, **span_options):
+        self.fps = fps
+        self.settle = max(1, int(round(settle_seconds * fps)))
+        self.keep = max(self.settle, int(round(keep_seconds * fps)))
+        self.max_frames = int(round(max_seconds * fps))
+        self.span_options = span_options
+        self.frames: list = []
+        self.start = 0            # stream index of frames[0]
+        self.signing = False
+        self.wait_for_rest = False
+
+    def push(self, landmarks: np.ndarray) -> Optional[Tuple[np.ndarray, Tuple[int, int]]]:
+        """Add one frame. When a sign has just ended, returns its frames and their stream indices."""
+        self.frames.append(np.asarray(landmarks, dtype=np.float32).reshape(TOTAL_LANDMARKS, LANDMARK_DIM))
+        arr = np.stack(self.frames)
+        height = _median3(wrist_height(arr))
+        seen = ~np.isnan(height)
+        rest = float(np.nanmax(height)) if seen.any() else None
+        if rest is None or rest < MIN_REST:
+            self.signing = rest is not None
+            self._forget(len(arr) - self.keep)
+            return None
+        raised = self.span_options.get("raised", RAISED)
+        away = self.span_options.get("away", AWAY)
+        up = seen & (np.nan_to_num(height, nan=rest) < rest - raised)
+        at_rest = ~seen | (np.nan_to_num(height, nan=rest) >= rest - away)
+        last_up = len(up) - 1 - int(np.argmax(up[::-1])) if up.any() else -1
+        settled = len(arr) - 1 - last_up >= self.settle and bool(at_rest[-self.settle:].all())
+        if self.wait_for_rest:
+            if settled:
+                self.wait_for_rest = False
+                self._forget(last_up + 1)
+            else:
+                self._forget(len(arr) - self.keep)
+            return None
+        self.signing = last_up >= 0
+        if not self.signing:
+            self._forget(len(arr) - self.keep)
+            return None
+        if not settled and len(arr) < self.max_frames:
+            return None
+        first, last = active_span(arr, self.fps, **self.span_options) or (0, len(arr) - 1)
+        sign, stream_span = arr[first:last + 1], (self.start + first, self.start + last)
+        self.wait_for_rest = not settled
+        self.signing = False
+        self._forget(last_up + 1)
+        return sign, stream_span
+
+    def _forget(self, count: int) -> None:
+        if count > 0:
+            del self.frames[:count]
+            self.start += count
