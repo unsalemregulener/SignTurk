@@ -8,6 +8,7 @@ over WebSocket, sentence assembly, and the landmark data that drives the
 import asyncio, os, json, time, traceback, uuid, logging, base64, secrets
 import numpy as np
 from contextlib import asynccontextmanager
+from datetime import timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -143,7 +144,12 @@ def parse_confidence(value: Optional[str]) -> Optional[float]:
 
 
 def iso_time(value) -> Optional[str]:
-    return value.isoformat() if value else None
+    """ISO 8601 with the UTC offset; SQLite hands back its UTC times without one."""
+    if not value:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.isoformat()
 
 
 # ── Schemas ───────────────────────────────────────────────

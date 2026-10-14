@@ -17,6 +17,7 @@ import sys
 import tempfile
 import time
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -190,6 +191,8 @@ with TestClient(backend.app) as client:
         check("history stores approved words", [row["result"] for row in history] == ["icmek", "cay", "ben"], history)
         check("history shows Turkish spelling", [row["text"] for row in history] == ["içmek", "çay", "ben"], history)
         check("history is per user", client.get("/api/history", headers=A).json() == [])
+        check("history times carry their UTC offset",
+              all(datetime.fromisoformat(row["created_at"]).utcoffset() is not None for row in history), history)
         check("summary counts approved words", client.get("/api/me/summary", headers=U).json()["translations"] == 3)
 
         clip = camera_clip(ROOT / "docs" / "videos" / "cay.mp4")
