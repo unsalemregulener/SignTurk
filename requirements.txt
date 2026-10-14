@@ -5,7 +5,7 @@ python-multipart==0.0.32
 websockets==17.2
 
 # ── ML / CV ───────────────────────────────────────────────
-tensorflow==2.18.0
+tensorflow==2.18.1
 keras==3.13.2             # the model files were saved with Keras 3.13.2
 mediapipe==0.10.21
 numpy<2.0
