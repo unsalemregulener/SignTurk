@@ -62,7 +62,11 @@ to where it is back down, and resamples the cut to the 32 frames the ensemble
 reads. The top sign is offered for approval when its probability is
 at least 0.70 and at least 0.12 above the second. In the hands-free mode the
 frames keep coming, and a sign is cut out the same way once the hands have
-been back down for 0.4 s.
+been back down for 0.3 s.
+
+Landmarks are divided by the longer side of the frame, with the shorter side
+centred, so x and y keep one scale as in AUTSL's square videos. Before this, a
+640×400 webcam frame was read 1.6 times taller than it is.
 
 ## Recordings and the hands-free mode
 
@@ -96,17 +100,49 @@ least half of it and it covers at least half of the cut.
 
 | Hands-free | Validation | Test |
 | --- | ---: | ---: |
-| Signs cut out | 98.4% | 94.5% |
-| Of those, read correctly | 95.1% | 92.8% |
-| Cuts that match no sign, per 100 signs | 2.9 | 5.3 |
-| Offered results that are right | 98.6% | 98.0% |
-| Delay after the clip's end (median) | 0.17 s | 0.17 s |
+| Signs cut out | 98.9% | 95.4% |
+| Of those, read correctly | 95.3% | 92.7% |
+| Cuts that match no sign, per 100 signs | 0.7 | 2.5 |
+| Offered results that are right | 98.9% | 97.9% |
+| Delay after the clip's end (median) | 0.00 s | 0.08 s |
 
-Most missed signs ran into a neighbour: two signs with less than 0.4 s of
+The Segmenter waits 0.3 s of rest before it cuts: on the validation split
+0.25, 0.3 and 0.4 s read 94.6%, 94.2% and 93.6% of the signs, and 0.3 s
+leaves one more frame for a webcam's wobble. It drops a cut with less than
+0.25 s of raised hands or shorter than 0.5 s, which brought the cuts that
+match no sign from 2.9 to 0.7 per 100 on the validation split.
+
+Most missed signs ran into a neighbour: two signs with less than 0.3 s of
 rest between them are read as one. The test signers also lower their hands to
 a different height than they started from more often: 10.0% of the test
 clips end more than 0.25 shoulder widths away, against 1.8% of the
 validation clips.
+
+### Framing
+
+AUTSL's frame reaches about 2.4 shoulder widths below the shoulder line, so
+the hands are in view at rest and in front of the chest. A laptop camera close
+to the signer cuts that space off. `tools/evaluate_recording.py --webcam`
+moves the bottom edge of the frame up: the hands below it sit on the edge
+with a low score, as RTMW places what it cannot see.
+
+| Test split, frame ends below the shoulders | Clip alone | 4 s recording, cut | Hands-free, signs read |
+| --- | ---: | ---: | ---: |
+| Full frame | 93.80% | 92.94% | 88.5% |
+| 2.0 shoulder widths | 93.53% | 92.94% | |
+| 1.5 shoulder widths | 92.33% | 91.82% | |
+| 1.2 shoulder widths | 91.29% | 90.65% | 86.6% |
+| 1.0 shoulder widths | 90.43% | 88.94% | |
+| 0.5 shoulder widths | 80.55% | 64.99% | 43.7% |
+
+The live page checks this on the camera's own frames
+([`pose_quality.py`](../../signturk_runtime/pose_quality.py)) and asks the
+signer to sit back or tilt the camera while less than 1.2 shoulder widths
+are in view. On a close webcam the hands at rest sit on the image's edge about
+0.6 shoulder widths below the shoulders, so the rest height counts from 0.45:
+with the frame ending at 0.5, that lifts the cut recordings on the validation
+split from 46.6% to 68.0% and changes nothing in a fuller frame. The same
+clips read as 640×400 frames on two scales score 89.90% instead of 93.80%.
 
 The first test run showed two problems, and both splits were measured again
 after fixing them. `AWAY` was widened from 0.25 to 0.4 for signers whose rest
@@ -120,6 +156,7 @@ now holds a single frame.
 
 - Isolated signs, one at a time; in the hands-free mode the hands have to
   come back down between signs.
+- The camera has to see the space below the shoulders; see [Framing](#framing).
 - The figures above are offline results on AUTSL. Recordings and streams are
   built from AUTSL clips, whose rest is a held frame rather than a person
   waiting in front of a webcam.

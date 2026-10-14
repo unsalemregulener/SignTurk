@@ -35,7 +35,8 @@ LEFT_SHOULDER, RIGHT_SHOULDER = 11, 12
 RAISED = 0.40     # shoulder widths above rest: the hands are signing
 AWAY = 0.40       # shoulder widths above rest: the hands are not back yet
 MARGIN_SECONDS = 0.0    # extra rest kept on each side of the cut
-MIN_REST = 0.6    # if even the lowest wrist position is higher, the hands never rested
+MIN_REST = 0.45   # if even the lowest wrist position is higher, the hands never rested
+# (on a close webcam, hands resting below the image sit on its edge, about 0.6 below the shoulders)
 
 
 def wrist_height(landmarks: np.ndarray) -> np.ndarray:
@@ -123,18 +124,23 @@ class Segmenter:
     """Cuts signs out of a stream of frames, for the hands-free mode.
 
     A sign is over once the hands have been back at rest for `settle_seconds`;
-    it is then cut with `active_span`, like a recording. While nobody signs,
-    only the last `keep_seconds` are kept, which also give the rest height. A
-    sign that goes on for `max_seconds` is cut where it is, and the next one
-    is only looked for after the hands have rested.
+    it is then cut with `active_span`, like a recording. A cut with less than
+    `min_raised_seconds` of raised hands, or shorter than `min_cut_seconds`, is
+    a twitch rather than a sign and is dropped. While nobody signs, only the
+    last `keep_seconds` are kept, which also give the rest height. A sign that
+    goes on for `max_seconds` is cut where it is, and the next one is only
+    looked for after the hands have rested.
     """
 
-    def __init__(self, fps: float, settle_seconds: float = 0.4, keep_seconds: float = 2.0,
-                 max_seconds: float = 8.0, **span_options):
+    def __init__(self, fps: float, settle_seconds: float = 0.3, keep_seconds: float = 2.0,
+                 max_seconds: float = 8.0, min_raised_seconds: float = 0.25, min_cut_seconds: float = 0.5,
+                 **span_options):
         self.fps = fps
         self.settle = max(1, int(round(settle_seconds * fps)))
         self.keep = max(self.settle, int(round(keep_seconds * fps)))
         self.max_frames = int(round(max_seconds * fps))
+        self.min_raised = int(round(min_raised_seconds * fps))
+        self.min_cut = int(round(min_cut_seconds * fps))
         self.span_options = span_options
         self.frames: list = []
         self.start = 0            # stream index of frames[0]
@@ -176,6 +182,8 @@ class Segmenter:
         self.wait_for_rest = not settled
         self.signing = False
         self._forget(last_up + 1)
+        if int(up.sum()) < self.min_raised or len(sign) < self.min_cut:
+            return None
         return sign, stream_span
 
     def _forget(self, count: int) -> None:

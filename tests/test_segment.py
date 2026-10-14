@@ -93,6 +93,9 @@ class SegmenterTests(unittest.TestCase):
         self.assertEqual(frames, last - first + 1)
         self.assertTrue(45 <= second_first <= 48, found)
 
+    def test_a_twitch_is_not_a_sign(self):
+        self.assertEqual(self.cuts([REST] * 12 + [1.2, 0.9, 0.9, 1.2] + [REST] * 12), [])
+
     def test_rest_alone_gives_nothing(self):
         self.assertEqual(self.cuts([REST, 1.35] * 60), [])
         self.assertEqual(self.cuts([None] * 60), [])

@@ -36,7 +36,8 @@ mode each sign is recorded on its own:
 2. For each frame the server runs RTMW whole-body pose estimation inside the
    person box of a YOLOX detector, which runs on every fourth frame. Of the 133
    keypoints it keeps 17 body points and 21 points per hand: 75 landmarks with
-   the signer's own left and right.
+   the signer's own left and right, divided by the longer side of the frame so
+   that x and y keep one scale.
 3. When the recording is complete the server cuts the sign out of it, the way
    AUTSL clips are cut: from where the higher wrist starts to rise from its
    rest height to where it is back down. The cut is resampled to 32 frames,
@@ -54,12 +55,18 @@ rebuilds the sentence from all approved words.
 
 In the **Sürekli** (hands-free) mode the browser keeps sending frames and the
 server watches the higher wrist. When the hands rise above their rest height
-and come back down for 0.4 s, the sign is cut out as in step 3, scored and
-offered for approval like a recording. With **Otomatik onay** switched on, a
-result that passes the thresholds goes straight into the sentence instead,
-and **Geri al** removes it. Every frame has to be processed within the
-camera's 83 ms, so the mode is offered when frames are fast enough, in
-practice on a GPU.
+and come back down for 0.3 s, the sign is cut out as in step 3, scored and
+offered for approval like a recording; a twitch shorter than half a second is
+ignored. With **Otomatik onay** switched on, a result that passes the
+thresholds goes straight into the sentence instead, and **Geri al** removes
+it. Every frame has to be processed within the camera's 83 ms, so the mode is
+offered when frames are fast enough, in practice on a GPU.
+
+The model learnt from signers filmed from further away, with the space below
+their shoulders in view, where most signs are made. While the camera is on,
+the page checks a few frames a second and shows a silhouette of where to sit;
+until at least 1.2 shoulder widths below the shoulders are in view it asks the
+signer to sit back or tilt the camera down.
 
 ### Measured on AUTSL
 
@@ -76,12 +83,18 @@ before and after the sign.
 | 4 s recording cut, sign starting within 2 s | 92.28–92.94% |
 
 In streams of five signs by one signer, with 0.3–1.5 s of rest between them,
-the hands-free mode cut out 94.5% of the signs and read 92.8% of those
-correctly; 5.3 cuts per 100 signs matched no sign. Of the results confident
-enough to be offered, 98.0% were right, and a sign was cut 0.17 s (median)
-after its clip ended. The settings were chosen on the validation split; the
+the hands-free mode cut out 95.4% of the signs and read 92.7% of those
+correctly; 2.5 cuts per 100 signs matched no sign. Of the results confident
+enough to be offered, 97.9% were right, and a sign was cut 0.08 s (median)
+after its clip ended.
+
+How much of the space below the shoulders the camera sees matters most. With
+the frame ending 1.2 shoulder widths below them, a cut recording still reads
+90.65%; with 0.5, as when sitting close to a laptop camera, it reads 64.99%
+and the hands-free mode finds about half of the signs. The settings were
+chosen on the validation split; the
 [model card](research/model_226/MODEL_CARD.md#recordings-and-the-hands-free-mode)
-has both splits.
+has both splits and the framing table.
 
 ## Model
 
@@ -196,7 +209,10 @@ The live socket also accepts `approve` (optionally with a `word`), `reject`,
 `{"action": "continuous"}` switches it to the hands-free mode (`"on": false`
 switches back, `"auto_approve": true` approves confident results): every frame
 is answered with `{"type": "watching", "state": "waiting" | "signing" |
-"reading"}`, and every sign cut out of the stream with a `result`.
+"reading"}`, and every sign cut out of the stream with a `result`. Outside a
+recording, `{"image": data_url, "preview": true}` is answered with
+`{"type": "framing", "ok", "hint", "space_below", "width"}`; hands-free frames
+carry the same under `framing`.
 
 ## Project layout
 
@@ -247,8 +263,10 @@ hands-free mode. The results are in [Measured on AUTSL](#measured-on-autsl).
 ## Scope
 
 - SignTurk recognises isolated signs, one at a time. In the hands-free mode
-  the hands have to come back down for about half a second between signs;
-  signs that run into each other are read as one.
+  the hands have to come back down for about a third of a second between
+  signs; signs that run into each other are read as one.
+- The camera has to see the signer from about the waist up; a close laptop
+  camera that cuts off the hands loses most of the accuracy.
 - A [GPU](#gpu) keeps the live page responsive; on a CPU a recorded sign takes
   a few seconds to process.
 - The sentence engine is rule-based and covers common sentence patterns.
