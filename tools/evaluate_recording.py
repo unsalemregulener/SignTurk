@@ -24,6 +24,11 @@ joined into streams of five signs with 0.3-1.5 s of rest between them, and
 signturk_runtime.segment.Segmenter reads each stream frame by frame. A found
 sign counts when it covers at least half of a true sign and a true sign at
 least half of it.
+
+`--webcam` frames the clips like a laptop camera: the image ends some
+shoulder widths below the shoulders, and the hands below that edge sit on
+it with a low score. It reports the clip alone, a cut four-second recording
+and the hands-free streams for each edge.
 """
 
 import argparse
@@ -176,44 +181,108 @@ def matches(found: tuple, true: tuple) -> bool:
     return overlap >= 0.5 * (true[1] - true[0] + 1) and overlap >= 0.5 * (found[1] - found[0] + 1)
 
 
+def stream_scores(scorer: Scorer, streams: list, truth: np.ndarray, settle: float) -> dict:
+    """How the Segmenter and the model read the streams with one settle time."""
+    total = sum(len(signs) for _, signs in streams)
+    windows, found, delays = [], [], []
+    for number, (frames, _) in enumerate(streams):
+        segmenter = segment.Segmenter(CAMERA_FPS, settle_seconds=settle, **CUT)
+        for position, frame in enumerate(frames):
+            cut_out = segmenter.push(frame)
+            if cut_out is not None:
+                windows.append(segment.resample(cut_out[0], FRAMES))
+                found.append((number, cut_out[1], position))
+    probabilities = scorer.probabilities(windows) if windows else np.zeros((0, len(scorer.ids)))
+    order = np.argsort(-probabilities, axis=1)
+    thresholds = scorer.config["thresholds"]
+    hit, right, offered, offered_right = 0, 0, 0, 0
+    used = set()
+    for (number, span, position), row, probability in zip(found, order, probabilities):
+        first, second = probability[row[0]], probability[row[1]]
+        confident = first >= thresholds["top1"] and first - second >= thresholds["margin"]
+        offered += confident
+        for true_first, true_last, index in streams[number][1]:
+            if (number, index) not in used and matches(span, (true_first, true_last)):
+                used.add((number, index))
+                hit += 1
+                correct = scorer.ids[row[0]] == truth[index]
+                right += correct
+                offered_right += confident and correct
+                delays.append((position - true_last) / CAMERA_FPS)
+                break
+    return {"found": hit / total, "extra": (len(found) - hit) / total, "right": right / max(hit, 1),
+            "read": right / total, "offered": offered / max(len(found), 1),
+            "offered_right": offered_right / max(offered, 1), "delay": float(np.median(delays)) if delays else 0.0}
+
+
+STREAM_HEADER = f"{'found':>8}{'extra':>8}{'right':>8}{'read':>8}{'offered':>9}{'o.right':>9}{'delay':>8}"
+STREAM_NOTE = ("found: true signs cut out; extra: cuts that match no sign, per true sign; right: of the found "
+               "signs, top-1 correct; read: found and correct; offered: confident cuts; delay: median seconds "
+               "from the end of the clip to the cut")
+
+
+def stream_row(row: dict) -> str:
+    return (f"{row['found']:>8.1%}{row['extra']:>8.1%}{row['right']:>8.1%}{row['read']:>8.1%}"
+            f"{row['offered']:>9.1%}{row['offered_right']:>9.1%}{row['delay']:>7.2f}s")
+
+
 def evaluate_streams(scorer: Scorer, clips: list, samples: list, truth: np.ndarray) -> int:
     streams = signer_streams(clips, samples)
     total = sum(len(signs) for _, signs in streams)
     print(f"{len(streams)} streams, {total} signs, {sum(len(f) for f, _ in streams) / CAMERA_FPS / 60:.0f} min")
-    print(f"{'settle':>7}{'found':>8}{'extra':>8}{'right':>8}{'read':>8}{'offered':>9}{'o.right':>9}{'delay':>8}")
-    for settle in (0.25, 0.4, 0.6):
-        windows, found, delays = [], [], []
-        for number, (frames, _) in enumerate(streams):
-            segmenter = segment.Segmenter(CAMERA_FPS, settle_seconds=settle, **CUT)
-            for position, frame in enumerate(frames):
-                cut_out = segmenter.push(frame)
-                if cut_out is not None:
-                    windows.append(segment.resample(cut_out[0], FRAMES))
-                    found.append((number, cut_out[1], position))
-        probabilities = scorer.probabilities(windows) if windows else np.zeros((0, len(scorer.ids)))
-        order = np.argsort(-probabilities, axis=1)
-        thresholds = scorer.config["thresholds"]
-        hit, right, offered, offered_right = 0, 0, 0, 0
-        used = set()
-        for (number, span, position), row, probability in zip(found, order, probabilities):
-            first, second = probability[row[0]], probability[row[1]]
-            confident = first >= thresholds["top1"] and first - second >= thresholds["margin"]
-            offered += confident
-            for true_first, true_last, index in streams[number][1]:
-                if (number, index) not in used and matches(span, (true_first, true_last)):
-                    used.add((number, index))
-                    hit += 1
-                    correct = scorer.ids[row[0]] == truth[index]
-                    right += correct
-                    offered_right += confident and correct
-                    delays.append((position - true_last) / CAMERA_FPS)
-                    break
-        print(f"{settle:>6.2f}s{hit / total:>8.1%}{(len(found) - hit) / total:>8.1%}{right / max(hit, 1):>8.1%}"
-              f"{right / total:>8.1%}{offered / max(len(found), 1):>9.1%}{offered_right / max(offered, 1):>9.1%}"
-              f"{np.median(delays) if delays else 0:>7.2f}s", flush=True)
-    print("found: true signs cut out; extra: cuts that match no sign, per true sign; right: of the found signs, "
-          "top-1 correct; read: found and correct; offered: confident cuts; delay: median seconds from the "
-          "end of the clip to the cut")
+    print(f"{'settle':>7}{STREAM_HEADER}")
+    for settle in (0.25, 0.3, 0.4):
+        print(f"{settle:>6.2f}s{stream_row(stream_scores(scorer, streams, truth, settle))}", flush=True)
+    print(STREAM_NOTE)
+    return 0
+
+
+def framed(frames: np.ndarray, below: float) -> np.ndarray:
+    """The frames as a camera sees them when its image ends `below` shoulder widths under the shoulders.
+
+    Points lower than that edge sit on it with a low score, as RTMW places
+    the parts of a person it cannot see.
+    """
+    out = np.array(frames, dtype=np.float32, copy=True)
+    seen = (out[:, 11, 3] > 0) & (out[:, 12, 3] > 0)
+    if not seen.any():
+        return out
+    shoulders_y = (out[seen, 11, 1] + out[seen, 12, 1]) / 2.0
+    width = np.linalg.norm(out[seen, 11, :2] - out[seen, 12, :2], axis=-1)
+    edge = float(np.median(shoulders_y) + below * np.median(width))
+    gone = (out[..., 3] > 0) & (out[..., 1] > edge)
+    out[..., 1] = np.where(gone, edge, out[..., 1])
+    out[..., 3] = np.where(gone, np.minimum(out[..., 3], 0.3), out[..., 3])
+    return out
+
+
+def stretched(frames: np.ndarray, factor: float) -> np.ndarray:
+    """y scaled by `factor` around the middle: a wide frame read with x and y on different scales."""
+    out = np.array(frames, dtype=np.float32, copy=True)
+    out[..., 1] = np.where(out[..., 3] > 0, 0.5 + (out[..., 1] - 0.5) * factor, 0.0)
+    return out
+
+
+def webcam(scorer: Scorer, clips: list, samples: list, truth: np.ndarray) -> int:
+    """The clips framed like a laptop camera that cuts off the space below the shoulders."""
+    camera = [camera_frames(clip) for clip in clips]
+    recordings = [recording(clip, int(CAMERA_FPS), RECORDING) for clip in clips]
+    print(f"{'top-1':<44}{'clip alone':>11}{'4 s, cut':>10}")
+    for below in (None, 2.0, 1.5, 1.2, 1.0, 0.5):
+        name = "full frame" if below is None else f"frame ends {below} shoulder widths lower"
+        alone = camera if below is None else [framed(f, below) for f in camera]
+        recorded = recordings if below is None else [framed(f, below) for f in recordings]
+        print(f"{name:<44}{scorer.score([segment.resample(f, FRAMES) for f in alone], truth)['top1']:>11.2%}"
+              f"{scorer.score([cut(f) for f in recorded], truth)['top1']:>10.2%}", flush=True)
+    old = scorer.score([segment.resample(stretched(f, 1.6), FRAMES) for f in camera], truth)["top1"]
+    print(f"{'640x400 read with x and y on one scale each':<44}{old:>11.2%}")
+    streams = signer_streams(clips, samples)
+    print(f"\nhands-free, settle 0.3 s{'':<20}{STREAM_HEADER}")
+    for below in (None, 1.2, 0.5):
+        name = "full frame" if below is None else f"frame ends {below} shoulder widths lower"
+        moved = streams if below is None else [(framed(frames, below), signs) for frames, signs in streams]
+        print(f"{name:<44}{stream_row(stream_scores(scorer, moved, truth, 0.3))}", flush=True)
+    print(STREAM_NOTE)
     return 0
 
 
@@ -224,6 +293,7 @@ def main() -> int:
     parser.add_argument("--limit", type=int, help="use an evenly spread subset of this many clips")
     parser.add_argument("--grid", action="store_true", help="try span settings instead of the table")
     parser.add_argument("--streams", action="store_true", help="measure the hands-free mode instead of the table")
+    parser.add_argument("--webcam", action="store_true", help="measure laptop-camera framing instead of the table")
     parser.add_argument("--margin", type=float, help=f"seconds of rest kept around a cut (default {segment.MARGIN_SECONDS})")
     parser.add_argument("--away", type=float, help=f"band above rest that still counts as away (default {segment.AWAY})")
     parser.add_argument("--out", type=Path, help="write the table as JSON")
@@ -253,6 +323,8 @@ def main() -> int:
         return grid(scorer, clips, truth)
     if args.streams:
         return evaluate_streams(scorer, clips, samples, truth)
+    if args.webcam:
+        return webcam(scorer, clips, samples, truth)
 
     rows = {}
     if SOURCE_FPS == 30:
