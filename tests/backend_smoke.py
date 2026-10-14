@@ -31,7 +31,6 @@ os.environ["SIGNTURK_ADMIN_EMAIL"] = ADMIN_EMAIL
 os.environ["SIGNTURK_ADMIN_PASSWORD"] = ADMIN_PASSWORD
 
 import cv2
-import numpy as np
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
@@ -46,12 +45,13 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + (f"  [{detail}]" if detail and not ok else ""))
 
 
-def camera_frames(path, end=0.55):
+def camera_frames(path):
     """Unmirrored camera-panel frames of the recorded interface (BGR, 30 fps).
 
-    docs/videos/cay.mp4 is a screen recording: the sign is made during the
-    first ~55% and the camera preview on screen was mirrored, so the panel is
-    cropped and flipped back to the frames the browser sent.
+    docs/videos/cay.mp4 is a screen recording: it starts in the middle of the
+    sign, the hands come down at about 3.5 s and rest from 4.5 s on. The camera
+    preview on screen was mirrored, so the panel is cropped and flipped back to
+    the frames the browser sent.
     """
     capture = cv2.VideoCapture(str(path))
     frames = []
@@ -61,7 +61,7 @@ def camera_frames(path, end=0.55):
             break
         frames.append(cv2.flip(frame[222:612, 256:882], 1))
     capture.release()
-    return frames[:max(int(len(frames) * end), 1)]
+    return frames
 
 
 def data_url(frame):
@@ -69,10 +69,14 @@ def data_url(frame):
     return "data:image/jpeg;base64," + base64.b64encode(jpeg.tobytes()).decode("ascii")
 
 
-def camera_clip(path, count=32):
-    """`count` evenly spaced camera-panel frames, as data URLs."""
+def camera_recording(path, seconds=4.0, rest_first=0.0, fps=12):
+    """What the live page sends: `seconds` of frames at `fps` as data URLs, the first `rest_first` at rest."""
     frames = camera_frames(path)
-    return [data_url(frames[i]) for i in np.linspace(0, len(frames) - 1, count).round().astype(int)]
+    step = 30 / fps
+    rest = frames[int(4.5 * 30):]
+    picked = [rest[int(round(i * step)) % len(rest)] for i in range(int(round(rest_first * fps)))]
+    picked += [frames[int(round(i * step))] for i in range(int(round((seconds - rest_first) * fps)))]
+    return [data_url(frame) for frame in picked]
 
 
 @contextmanager
@@ -195,7 +199,9 @@ with TestClient(backend.app) as client:
               all(datetime.fromisoformat(row["created_at"]).utcoffset() is not None for row in history), history)
         check("summary counts approved words", client.get("/api/me/summary", headers=U).json()["translations"] == 3)
 
-        clip = camera_clip(ROOT / "docs" / "videos" / "cay.mp4")
+        video = ROOT / "docs" / "videos" / "cay.mp4"
+        clip = camera_recording(video)
+        check("a recording is four seconds", len(clip) == status["record_frames"] == 48, (len(clip), status))
         default_every = backend.LIVE226.detect_every
         backend.LIVE226.reset_timings()
         with live_socket(client, user_token) as ws:
@@ -216,6 +222,16 @@ with TestClient(backend.app) as client:
             update = ws.receive_json()
             check("approval updates the sentence", update.get("type") == "sentence_update" and len(update["words"]) == 1,
                   update)
+
+            # A second of rest before the sign is cut away
+            _, late, _ = record(ws, camera_recording(video, rest_first=1.0))
+            late_top = late.get("top", [])
+            print(f"     cay after 1 s of rest: {[(row['gloss'], row['confidence']) for row in late_top]}, "
+                  f"sign frames {late.get('sign_frames')}")
+            check("the rest before the sign is cut away", (late.get("sign_frames") or [0])[0] >= 8, late)
+            check("a sign after a second of rest is recognised", bool(late_top) and late_top[0]["gloss"] == "cay", late)
+            ws.send_text(json.dumps({"action": "reject"}))
+            ws.receive_json()
         rows = client.get("/api/history", headers=U).json()
         check("approval stored with its confidence", rows[0]["mode"] == "Live226" and rows[0]["confidence"].endswith("%"),
               rows[:1])

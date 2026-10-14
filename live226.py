@@ -1,8 +1,8 @@
 """226-class live mode: loads the ensemble and RTMW, turns one recorded sign into a prediction.
 
-The browser records a sign as a short clip and streams its frames. The server
-extracts landmarks from each frame as it arrives (`landmarks`) and asks the
-ensemble once the clip is complete (`predict`).
+The browser records four seconds and streams the frames. The server extracts
+landmarks from each frame as it arrives (`landmarks`); once the recording is
+complete it cuts the sign out of it and asks the ensemble (`predict`).
 """
 
 from __future__ import annotations
@@ -17,8 +17,9 @@ import cv2
 import numpy as np
 
 from signturk_runtime.config import load_config, load_vocabulary, missing_files
-from signturk_runtime.features import build_feature_bundle, hand_motion, sample_indices
+from signturk_runtime.features import build_feature_bundle, hand_motion
 from signturk_runtime.pose_quality import evaluate_pose_quality
+from signturk_runtime.segment import sign_clip
 from text_processing.lexicon import restore_turkish
 
 logger = logging.getLogger("signturk")
@@ -26,6 +27,9 @@ logger = logging.getLogger("signturk")
 # Mean frame-to-frame hand movement below which the clip holds no sign.
 MIN_HAND_MOTION = 0.004
 MAX_FRAME_WIDTH = 640
+# The live page records 4 seconds at 12 frames per second.
+CAMERA_FPS = 12
+RECORD_FRAMES = 48
 
 
 def prepare_frame(frame_bgr: np.ndarray) -> np.ndarray:
@@ -71,6 +75,8 @@ class Live226:
             "device": self.device,
             "num_classes": len(self.vocabulary),
             "frame_count": self.frame_count,
+            "record_frames": RECORD_FRAMES,
+            "camera_fps": CAMERA_FPS,
             "thresholds": self.config["thresholds"],
             "detect_every": self.detect_every,
             "avg_frame_ms": self._average(self.frame_ms),
@@ -128,8 +134,8 @@ class Live226:
         return result
 
     def predict(self, clip: list) -> dict:
-        """Top-3 for a clip of per-frame landmarks."""
-        window = np.stack([clip[int(i)] for i in sample_indices(len(clip), self.frame_count)])
+        """Top-3 for a recording of per-frame landmarks, read from the sign's span when one is found."""
+        window, span = sign_clip(np.stack(clip), CAMERA_FPS, self.frame_count)
         started = time.perf_counter()
         probabilities = self.ensemble.predict(build_feature_bundle(window))
         latency_ms = (time.perf_counter() - started) * 1000.0
@@ -146,7 +152,7 @@ class Live226:
         margin = top[0]["confidence"] - top[1]["confidence"]
         thresholds = self.config["thresholds"]
         motion = hand_motion(window)
-        quality = evaluate_pose_quality(clip[len(clip) // 2])
+        quality = evaluate_pose_quality(window[len(window) // 2])
         feedback = None
         if motion < MIN_HAND_MOTION:
             feedback = "Hareket algılanmadı"
@@ -158,5 +164,6 @@ class Live226:
             "margin": round(margin, 4),
             "hand_motion": round(motion, 5),
             "feedback": feedback,
+            "sign_frames": list(span) if span else None,
             "model_ms": round(latency_ms, 1),
         }

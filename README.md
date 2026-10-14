@@ -26,15 +26,18 @@ API messages are in Turkish.
 On the **Canlı Çeviri** page each sign is recorded on its own.
 
 1. The user presses **İşareti kaydet**. After a 3-2-1 countdown the browser
-   captures 32 unmirrored frames at about 12 fps (2.7 seconds) and streams
-   them to the server as it records.
+   captures four seconds of unmirrored frames at about 12 fps (48 frames) and
+   streams them to the server as it records.
 2. For each frame the server runs RTMW whole-body pose estimation inside the
    person box of a YOLOX detector, which runs on every fourth frame. Of the 133
    keypoints it keeps 17 body points and 21 points per hand: 75 landmarks with
    the signer's own left and right.
-3. When the clip is complete the landmarks are centred between the shoulders,
-   scaled by the shoulder width and turned into joint, bone, motion, geometry
-   and hand features.
+3. When the recording is complete the server cuts the sign out of it, the way
+   AUTSL clips are cut: from where the higher wrist leaves its rest height to
+   where it is back, with 0.15 s of rest on each side. The cut is resampled to
+   32 frames, and the landmarks are centred between the shoulders, scaled by
+   the shoulder width and turned into joint, bone, motion, geometry and hand
+   features.
 4. Four Keras models score the 226 signs and their probabilities are averaged
    with the weights 0.10, 0.21, 0.55 and 0.14.
 5. The page shows the top three. The first becomes the approval candidate when
@@ -121,7 +124,7 @@ Settings are read from the environment or from a `.env` file
 | `SIGNTURK_ADMIN_NAME` | `SignTurk Admin` | display name of that account |
 | `SIGNTURK_TOKEN_HOURS` | `12` | how long a sign-in stays valid |
 | `SIGNTURK_ENABLE_226` | `1` | `0` skips loading the model, for example to work on the other pages |
-| `SIGNTURK_226_DETECT_EVERY` | `4` | run the person detector on every Nth frame of a clip and reuse its box in between |
+| `SIGNTURK_226_DETECT_EVERY` | `4` | run the person detector on every Nth frame of a recording and reuse its box in between |
 | `SIGNTURK_226_DEVICE` | `auto` | `cuda` or `cpu`; `auto` uses CUDA when ONNX Runtime has it |
 | `HF_TOKEN`, `SIGNAI_*` | off | optional ML layer for the sentence engine, see [`text_processing`](text_processing/README.md) |
 
@@ -159,15 +162,15 @@ The live socket also accepts `approve` (optionally with a `word`), `reject`,
 
 ```
 backend.py             FastAPI app: accounts, live WebSocket, history, admin
-live226.py             model loading, per-frame landmarks, clip prediction
-signturk_runtime/      YOLOX and RTMW (rtm.py), extractor, features, ensemble, framing check
+live226.py             model loading, per-frame landmarks, prediction
+signturk_runtime/      YOLOX and RTMW (rtm.py), extractor, features, sign cut (segment.py), ensemble, framing check
 research/model_226/    stream config, vocabulary, evaluation summary, model card
 landmark_smoother.py   smoothing applied to avatar landmark files
 database.py, models.py SQLAlchemy engine and tables
 text_processing/       Turkish sentence engine
 frontend/              interface (React from a CDN), avatar page, three.js r128, avatar.glb
 landmarks/             226 landmark sequences for the avatar
-tools/                 download_models.py, evaluate_226.py, extract_landmarks.py (avatar files from AUTSL)
+tools/                 download_models.py, evaluate_226.py, evaluate_recording.py, extract_landmarks.py (avatar files from AUTSL)
 tests/                 unit tests, the end-to-end check (backend_smoke.py), the socket check
 LICENSES/              license of the code adapted from rtmlib
 ```
@@ -182,9 +185,10 @@ python tests/backend_smoke.py      # needs requirements-dev.txt and the weights
 ```
 
 CI runs all of them on every push and pull request, the last one with the
-real models: it records a webcam clip through the live socket. It also checks
-that every weight URL is reachable, and builds and starts the Docker image,
-where `tests/socket_check.py` sends the same clip through uvicorn.
+real models: it sends four-second webcam recordings through the live socket,
+one of them with a second of rest before the sign. It also checks that every
+weight URL is reachable, and builds and starts the Docker image, where
+`tests/socket_check.py` sends a recording through uvicorn.
 
 `tools/evaluate_226.py` measures the model on AUTSL videos, which are not
 included. The test split takes about 75 minutes on an RTX 5070 Ti:
@@ -192,6 +196,11 @@ included. The test split takes about 75 minutes on an RTX 5070 Ti:
 ```bash
 python tools/evaluate_226.py --videos AUTSL/test --labels AUTSL/test/ground_truth.csv
 ```
+
+With `--cache-landmarks DIR` it saves the landmarks of every frame instead,
+and `tools/evaluate_recording.py --cache DIR` turns the clips into four-second
+recordings with rest around the sign and compares the model's input taken
+from the whole recording and from the cut.
 
 ## Scope
 

@@ -10,6 +10,12 @@ The folder needs `<sample>_color.mp4` files; the labels file has one
 `<sample>,<AUTSL class id>` row per sample. Rows are appended to a CSV, so an
 interrupted run continues where it stopped. On an NVIDIA GPU install
 requirements-gpu.txt first; on the CPU a full split takes many hours.
+
+With `--cache-landmarks DIR` nothing is scored: the landmarks of every frame
+are saved as `DIR/<sample>.npy`, shape (frames, 75, 4), for
+tools/evaluate_recording.py. `--cache-fps 12` keeps only the frames a 12 fps
+camera would see. `--shard 1/3` takes every third sample, so several
+processes can share a GPU.
 """
 
 import argparse
@@ -20,6 +26,7 @@ import sys
 import time
 from collections import Counter
 from pathlib import Path
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -31,6 +38,7 @@ from live226 import Live226, prepare_frame  # noqa: E402
 from signturk_runtime.features import build_feature_bundle, sample_indices  # noqa: E402
 
 REPORTED = ROOT / "research" / "model_226" / "evaluation" / "four_stream_metrics.json"
+SOURCE_FPS = 30.0   # AUTSL videos
 FIELDS = ["sample", "label", "prediction", "correct", "top5", "confidence", "frames", "detect_ms", "pose_ms", "seconds"]
 
 
@@ -65,6 +73,46 @@ def evaluate_clip(live: Live226, frames: list, detect_every: int):
         pose_ms += live.extractor.last_pose_ms
     probabilities = live.ensemble.predict(build_feature_bundle(np.stack(clip)))
     return probabilities, detect_ms / len(clip), pose_ms / len(clip)
+
+
+def video_landmarks(live: Live226, frames: list, detect_every: int) -> np.ndarray:
+    """(frames, 75, 4) landmarks of every frame, with the server's box reuse."""
+    clip, boxes = [], None
+    for frame in frames:
+        found = boxes is not None and len(boxes) > 0
+        reuse = boxes if found and len(clip) % detect_every else None
+        landmarks, boxes = live.landmarks(prepare_frame(frame), reuse)
+        clip.append(landmarks)
+    return np.stack(clip).astype(np.float32)
+
+
+def cache_landmarks(live: Live226, labels: list, videos: Path, folder: Path, detect_every: int,
+                    fps: Optional[float]) -> int:
+    folder.mkdir(parents=True, exist_ok=True)
+    settings = {"fps": fps or SOURCE_FPS, "detect_every": detect_every}
+    info = folder / "cache.json"
+    if info.exists() and json.loads(info.read_text(encoding="utf-8")) != settings:
+        print(f"{folder} holds landmarks made with {info.read_text(encoding='utf-8')}", file=sys.stderr)
+        return 1
+    info.write_text(json.dumps(settings), encoding="utf-8")
+    todo = [sample for sample, _ in labels if not (folder / f"{sample}.npy").exists()]
+    print(f"caching landmarks of {len(todo)} videos in {folder}, {len(labels) - len(todo)} already there")
+    started = time.time()
+    for number, sample in enumerate(todo, 1):
+        video = videos / f"{sample}_color.mp4"
+        frames = read_video(video) if video.exists() else []
+        if fps and frames:
+            count = int(np.floor((len(frames) - 1) * fps / SOURCE_FPS)) + 1
+            frames = [frames[int(round(i * SOURCE_FPS / fps))] for i in range(count)]
+        if frames:
+            partial = folder / f"{sample}.tmp.npy"
+            np.save(partial, video_landmarks(live, frames, detect_every))
+            partial.replace(folder / f"{sample}.npy")
+        if number % 100 == 0 or number == len(todo):
+            elapsed = time.time() - started
+            print(f"{number}/{len(todo)}  {elapsed / number:.2f}s per video, "
+                  f"about {(len(todo) - number) * elapsed / number / 60:.0f} min left", flush=True)
+    return 0
 
 
 def macro_f1(rows: list) -> float:
@@ -118,11 +166,17 @@ def main() -> int:
                         help="run the person detector on every Nth frame (1 as in the original evaluation)")
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto")
     parser.add_argument("--limit", type=int, help="evaluate an evenly spread subset of this many samples")
+    parser.add_argument("--cache-landmarks", type=Path, metavar="DIR",
+                        help="save the landmarks of every frame to DIR instead of evaluating")
+    parser.add_argument("--cache-fps", type=float, help="with --cache-landmarks: only the frames a camera at this rate sees")
+    parser.add_argument("--shard", default="1/1", help="K/N: only every Nth sample, starting with the Kth")
     args = parser.parse_args()
 
     labels = read_labels(args.labels)
     if args.limit and args.limit < len(labels):
         labels = [labels[int(i)] for i in np.linspace(0, len(labels) - 1, args.limit).round()]
+    shard, shards = (int(part) for part in args.shard.split("/"))
+    labels = labels[shard - 1::shards]
     out = args.out or args.videos.parent / "results" / f"{args.videos.name}_detect{args.detect_every}.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     done = {}
@@ -136,6 +190,8 @@ def main() -> int:
     if not live.ready:
         print(live.message, file=sys.stderr)
         return 1
+    if args.cache_landmarks:
+        return cache_landmarks(live, labels, args.videos, args.cache_landmarks, args.detect_every, args.cache_fps)
     names = {entry["autsl_id"]: entry["gloss"] for entry in live.vocabulary}
     print(f"226 model on {live.device}; {len(labels)} samples, {len(done)} already in {out}")
 
