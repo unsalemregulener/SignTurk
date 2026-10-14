@@ -532,8 +532,9 @@ async def live226_predict(websocket: WebSocket):
     fast enough, and {"action": "continuous", "on": false} turns it off. Frames
     then keep coming; each is answered with {"type": "watching", "state":
     "waiting" | "signing" | "reading"}, and every sign cut out of the stream
-    returns a result. With "auto_approve" a confident result goes straight into
-    the sentence.
+    returns a result that waits for approval. With "auto_approve": true, which
+    the user switches on, a confident result goes straight into the sentence;
+    sending the action again changes it without restarting the stream.
     """
     identity = await _authenticate_socket(websocket)
     if identity is None:
@@ -564,11 +565,13 @@ async def live226_predict(websocket: WebSocket):
                 await websocket.send_json(session.handle(action, payload))
             elif action == "continuous":
                 wanted = payload.get("on", True) is not False
-                on = wanted and LIVE226.continuous_ok
-                segmenter, boxes, streamed = (Segmenter(CAMERA_FPS) if on else None), None, 0
+                if not wanted:
+                    segmenter = None
+                elif segmenter is None and LIVE226.continuous_ok:
+                    segmenter, boxes, streamed = Segmenter(CAMERA_FPS), None, 0
                 auto_approve = bool(payload.get("auto_approve"))
-                reply = {"type": "continuous", "on": on}
-                if wanted and not on:
+                reply = {"type": "continuous", "on": segmenter is not None, "auto_approve": auto_approve}
+                if wanted and segmenter is None:
                     reply["error"] = "Düğmesiz mod için sunucu yeterince hızlı değil"
                 await websocket.send_json(reply)
             elif action == "start":

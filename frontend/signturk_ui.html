@@ -931,6 +931,8 @@ function LivePage(){
   const [mode, setMode] = useState("record");   // record, continuous (hands-free)
   const [watch, setWatch] = useState("off");    // off, waiting, signing, reading
   const modeRef = useRef("record");
+  const [autoApprove, setAutoApprove] = useState(false);   // hands-free: confident results skip approval
+  const autoApproveRef = useRef(false);
   const streamTimerRef = useRef(null);
   const inFlightRef = useRef(0);
   const [health] = useHealth(true);
@@ -1066,12 +1068,13 @@ function LivePage(){
   }, []);
 
   // Hands-free: frames go out without a button, at most two awaiting an answer.
-  // The server cuts each sign out of the stream; confident ones enter the sentence.
+  // The server cuts each sign out of the stream; results wait for approval
+  // unless automatic approval is on.
   const startStream = useCallback(() => {
     stopStream();
     setResult(null);
     setPending(null);
-    sendAction({action:"continuous", auto_approve:true});
+    sendAction({action:"continuous", auto_approve:autoApproveRef.current});
     setWatch("waiting");
     setStatus("İşaret bekleniyor · her işaretten sonra ellerinizi indirin");
     streamTimerRef.current = setInterval(() => {
@@ -1082,6 +1085,13 @@ function LivePage(){
       sendAction({image});
     }, CLIP_INTERVAL_MS);
   }, [captureFrame, sendAction, stopStream]);
+
+  const toggleAutoApprove = useCallback(() => {
+    const next = !autoApproveRef.current;
+    autoApproveRef.current = next;
+    setAutoApprove(next);
+    if (streamTimerRef.current) sendAction({action:"continuous", auto_approve:next});
+  }, [sendAction]);
 
   const chooseMode = useCallback((next) => {
     if (next === modeRef.current || clipState !== "idle") return;
@@ -1261,6 +1271,12 @@ function LivePage(){
             )}
             {running && mode === "record" && (
               <button className="btn primary" onClick={recordSign} disabled={clipState !== "idle"}><Icon name="Video"/> İşareti kaydet</button>
+            )}
+            {mode === "continuous" && (
+              <button className={`btn ${autoApprove ? "primary" : ""}`} onClick={toggleAutoApprove}
+                title="Açıkken eşikleri geçen tahmin onay beklemeden cümleye girer; Geri al ile silinir">
+                <Icon name="CheckCheck"/> Otomatik onay {autoApprove ? "açık" : "kapalı"}
+              </button>
             )}
             <button className="btn" onClick={() => setMirrorPreview(v => !v)}><Icon name="RefreshCw"/> Önizleme</button>
           </div>

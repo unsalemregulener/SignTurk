@@ -9,11 +9,12 @@ can play signs back. The interface and API messages are in Turkish.
 
 - **226 signs:** every sign in AUTSL, recognised from RTMW whole-body
   landmarks by a four-stream ensemble: 94.39% top-1 on the AUTSL test split.
-- **Approval step:** a prediction enters the sentence only after the user
-  accepts it, so a wrong guess can be rejected first.
+- **Approval step:** by default a prediction enters the sentence only after
+  the user accepts it, so a wrong guess can be rejected first.
 - **Hands-free mode:** with a GPU the page can watch the camera without a
   record button. Each sign is cut out of the stream once the hands come back
-  down, and a confident result goes straight into the sentence.
+  down and waits for approval like a recorded one; the user can let confident
+  results into the sentence automatically.
 - **Turkish sentence engine:** rule-based morphology turns glosses such as
   `ben çay içmek` into `Ben çay içiyorum.`
 - **3D avatar:** 226 recorded landmark sequences replayed on a rigged
@@ -53,11 +54,12 @@ rebuilds the sentence from all approved words.
 
 In the **Sürekli** (hands-free) mode the browser keeps sending frames and the
 server watches the higher wrist. When the hands rise above their rest height
-and come back down for 0.4 s, the sign is cut out as in step 3 and scored. A
-result that passes the thresholds goes straight into the sentence (**Geri al**
-removes it); any other result waits for the user's choice. Every frame has to
-be processed within the camera's 83 ms, so the mode is offered when frames are
-fast enough, in practice on a GPU.
+and come back down for 0.4 s, the sign is cut out as in step 3, scored and
+offered for approval like a recording. With **Otomatik onay** switched on, a
+result that passes the thresholds goes straight into the sentence instead,
+and **Geri al** removes it. Every frame has to be processed within the
+camera's 83 ms, so the mode is offered when frames are fast enough, in
+practice on a GPU.
 
 ## Model
 
@@ -169,10 +171,10 @@ which keeps it out of URLs and access logs.
 
 The live socket also accepts `approve` (optionally with a `word`), `reject`,
 `undo` and `reset_sentence` actions and answers with `sentence_update`.
-`{"action": "continuous", "auto_approve": true}` switches it to the hands-free
-mode (`"on": false` switches back): every frame is answered with
-`{"type": "watching", "state": "waiting" | "signing" | "reading"}`, and every
-sign cut out of the stream with a `result`.
+`{"action": "continuous"}` switches it to the hands-free mode (`"on": false`
+switches back, `"auto_approve": true` approves confident results): every frame
+is answered with `{"type": "watching", "state": "waiting" | "signing" |
+"reading"}`, and every sign cut out of the stream with a `result`.
 
 ## Project layout
 

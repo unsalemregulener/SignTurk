@@ -109,14 +109,14 @@ def record(ws, clip):
     return started, ws.receive_json(), processed
 
 
-def stream(ws, frames):
-    """Frames in the hands-free mode with auto_approve; the results and sentence updates that came back."""
+def stream(ws, frames, auto_approve=False):
+    """Frames in the hands-free mode; the results and sentence updates that came back."""
     found, updates = [], []
     for frame in frames:
         ws.send_text(json.dumps({"image": frame}))
         if ws.receive_json().get("state") == "reading":
             found.append(ws.receive_json())
-            if found[-1].get("pending_word"):   # confident: approved at once
+            if auto_approve and found[-1].get("pending_word"):   # confident: approved at once
                 updates.append(ws.receive_json())
     return found, updates
 
@@ -273,16 +273,26 @@ with TestClient(backend.app) as client:
             reply = ws.receive_json()
             check("the hands-free mode is refused when it is off", reply.get("on") is False and reply.get("error"), reply)
         backend.LIVE226.continuous_setting = "on"
+        hands_free = camera_recording(video, seconds=7.5, rest_first=1.0)
         with live_socket(client, user_token) as ws:
-            ws.send_text(json.dumps({"action": "continuous", "auto_approve": True}))
+            ws.send_text(json.dumps({"action": "continuous"}))
             check("the hands-free mode starts", ws.receive_json().get("on") is True)
-            found, updates = stream(ws, camera_recording(video, seconds=7.5, rest_first=1.0))
+            found, _ = stream(ws, hands_free)
+            print(f"     hands-free stream: {[(r['top'][0]['gloss'], r['top'][0]['confidence'], r['frames']) for r in found]}")
+            check("the stream holds one sign", len(found) == 1, found)
+            check("the hands-free sign is cay", bool(found) and found[0]["top"][0]["gloss"] == "cay", found)
+            check("the sign waits for approval", bool(found) and found[0].get("pending_word") == "cay", found)
+            ws.send_text(json.dumps({"action": "approve"}))
+            check("approving it fills the sentence", ws.receive_json().get("words") == ["cay"])
+
+            ws.send_text(json.dumps({"action": "continuous", "auto_approve": True}))
+            reply = ws.receive_json()
+            check("automatic approval switches on in the running stream",
+                  reply.get("on") is True and reply.get("auto_approve") is True, reply)
+            found, updates = stream(ws, hands_free, auto_approve=True)
+            check("with automatic approval a confident sign enters the sentence by itself",
+                  len(found) == 1 and bool(updates) and updates[-1].get("words") == ["cay", "cay"], (found, updates))
         backend.LIVE226.continuous_setting = setting
-        print(f"     hands-free stream: {[(r['top'][0]['gloss'], r['top'][0]['confidence'], r['frames']) for r in found]}")
-        check("the stream holds one sign", len(found) == 1, found)
-        check("the hands-free sign is cay", bool(found) and found[0]["top"][0]["gloss"] == "cay", found)
-        check("a confident sign enters the sentence by itself",
-              bool(updates) and updates[-1].get("words") == ["cay"] and updates[-1].get("added") == "cay", updates)
 
     client.post("/api/logout", headers=U)
     check("token revoked after logout", client.get("/api/history", headers=U).status_code == 401)

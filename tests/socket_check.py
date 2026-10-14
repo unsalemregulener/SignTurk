@@ -95,7 +95,7 @@ def main() -> int:
     # Hands-free: a second of rest, then the whole video, whose sign ends in rest
     with connect(f"{ws_url}/api/predict/live226") as ws:
         ws.send(json.dumps({"action": "auth", "token": token}))
-        ws.send(json.dumps({"action": "continuous", "auto_approve": True}))
+        ws.send(json.dumps({"action": "continuous"}))
         reply = json.loads(ws.recv(timeout=60))
         if not reply.get("on"):
             print("     the hands-free mode is not offered here; SIGNTURK_CONTINUOUS=on tests it anyway")
@@ -105,11 +105,10 @@ def main() -> int:
                 ws.send(json.dumps({"image": frame}))
                 if json.loads(ws.recv(timeout=120)).get("state") == "reading":
                     found.append(json.loads(ws.recv(timeout=120)))
-                    if found[-1].get("pending_word"):
-                        ws.recv(timeout=120)   # the sentence update of the approved sign
             print("     hands-free stream:", [(r["top"][0]["gloss"], r["top"][0]["confidence"]) for r in found])
-            check("the hands-free stream holds one sign, cay",
-                  len(found) == 1 and found[0]["top"][0]["gloss"] == "cay", found)
+            check("the hands-free stream holds one sign, cay, waiting for approval",
+                  len(found) == 1 and found[0]["top"][0]["gloss"] == "cay" and found[0].get("pending_word") == "cay",
+                  found)
 
     print(f"{len(FAILURES)} failed" if FAILURES else "all socket checks passed")
     return 1 if FAILURES else 0
