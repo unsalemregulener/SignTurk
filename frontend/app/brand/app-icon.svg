@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" fill="none">
+  <title>SignTurk</title>
+  <defs>
+    <linearGradient id="st-tile" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1B2335"/>
+      <stop offset="1" stop-color="#080B11"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#st-tile)"/>
+  <g transform="translate(91.10 53.30) scale(0.5217)">
+    <g stroke-width="66" stroke-linecap="round" stroke-linejoin="round">
+      <path stroke="#3B82F6" d="M270 205C330 205 385 214 400 245C408 262 405 278 400 288"/>
+      <path stroke="#F59E0B" d="M300 178C360 176 430 170 470 180C530 195 560 240 552 288"/>
+      <path stroke="#F59E0B" d="M368 97C330 135 265 190 240 225C215 262 215 330 245 370C275 405 330 420 365 438C395 455 410 480 410 520C412 560 405 600 380 630C340 675 290 690 240 690C170 690 115 655 85 598"/>
+      <path stroke="#3B82F6" d="M135 97C110 155 85 230 75 330"/>
+      <path stroke="#3B82F6" d="M265 65C215 125 160 180 120 235C88 280 70 320 70 370C70 460 140 548 240 548C330 548 385 470 385 362C470 358 558 430 562 540C566 650 480 712 390 712C350 712 310 702 285 688"/>
+      <path stroke="#F59E0B" d="M380 630C340 675 290 690 240 690"/>
+    </g>
+  </g>
+</svg>

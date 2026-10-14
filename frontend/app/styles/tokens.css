@@ -1,0 +1,198 @@
+/* SignTurk design tokens, shared by the app and the avatar page.
+   Light is the base; dark follows the system unless data-theme on <html> says otherwise.
+   Colours: cobalt (brand), amber (the accent) and carbon for the camera and avatar stages,
+   which stay dark in both themes. The mark's two hands use --arc-1 and --arc-node. */
+
+@font-face{font-family:"Plus Jakarta Sans";font-style:normal;font-weight:200 800;font-display:swap;
+  src:url(/frontend/fonts/plus-jakarta-sans-latin-ext.woff2) format("woff2");
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"Plus Jakarta Sans";font-style:normal;font-weight:200 800;font-display:swap;
+  src:url(/frontend/fonts/plus-jakarta-sans-latin.woff2) format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Lexend";font-style:normal;font-weight:100 900;font-display:swap;
+  src:url(/frontend/fonts/lexend-latin-ext.woff2) format("woff2");
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"Lexend";font-style:normal;font-weight:100 900;font-display:swap;
+  src:url(/frontend/fonts/lexend-latin.woff2) format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+
+:root{
+  color-scheme:light;
+  --font-display:"Plus Jakarta Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --font-text:"Lexend",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+
+  /* Neutrals: warm alabaster and deep slate ink */
+  --bg:#f7f6f2;
+  --bg-2:#efece6;
+  --surface:#ffffff;
+  --surface-2:#f3f1ec;
+  --surface-3:#e6e3dc;
+  --line:#dcd8d0;
+  --line-2:#c6c1b7;
+  --line-strong:#8c877d;   /* input edges: 3:1 against the panel */
+  --ink:#12161f;
+  --ink-2:#384152;
+  --muted:#5b6577;
+
+  /* Brand: cobalt */
+  --brand:#0057d9;
+  --brand-hover:#0044b0;
+  --brand-ink:#ffffff;
+  --brand-soft:rgba(0,87,217,.10);
+  --brand-text:#0049b8;
+
+  /* Accent: amber */
+  --accent:#d97706;
+  --accent-text:#92400e;
+  --accent-soft:rgba(217,119,6,.12);
+
+  /* The mark: cobalt and amber hands */
+  --arc-1:#0057d9;
+  --arc-node:#d97706;
+
+  /* States: approve, warn, reject and recording are told apart by colour and by shape */
+  --good:#0d7a4e;
+  --good-ink:#ffffff;
+  --good-soft:rgba(13,122,78,.12);
+  --warn:#a14807;          /* dark enough for 4.5:1 on its soft fill */
+  --warn-ink:#ffffff;
+  --warn-soft:rgba(180,83,9,.12);
+  --bad:#b91c1c;
+  --bad-ink:#ffffff;
+  --bad-soft:rgba(185,28,28,.10);
+  --rec:#e11d48;
+  --rec-ink:#ffffff;
+  --rec-soft:rgba(225,29,72,.22);
+
+  /* Camera and avatar stage: Studio Carbon in both themes */
+  --stage:#0b0f17;
+  --stage-2:#131a27;
+  --stage-ink:#f3f5f8;
+  --stage-vignette:radial-gradient(circle at 50% 60%,#1e293b 0%,#0b0f17 75%);
+  --glass:rgba(11,15,23,.82);
+  --glass-line:rgba(255,255,255,.14);
+  --glass-blur:blur(16px);
+
+  /* Depth */
+  --edge:inset 0 0 0 1px var(--line);
+  --shadow-1:0 1px 3px rgba(18,22,31,.06),0 1px 2px rgba(18,22,31,.04);
+  --shadow-2:0 6px 16px -4px rgba(18,22,31,.08),0 2px 6px -1px rgba(18,22,31,.04);
+  --shadow-3:0 20px 32px -8px rgba(18,22,31,.14),0 8px 16px -4px rgba(18,22,31,.06);
+  --focus:0 0 0 2px var(--surface),0 0 0 4px var(--brand);
+
+  /* Shape */
+  --r-xs:6px;
+  --r-sm:10px;
+  --r-md:14px;
+  --r-lg:20px;
+  --r-xl:28px;
+  --r-full:9999px;
+
+  /* Type scale */
+  --fs-xs:.75rem;
+  --fs-sm:.875rem;
+  --fs-md:1rem;
+  --fs-lg:1.125rem;
+  --fs-xl:1.25rem;
+  --fs-2xl:1.5rem;
+  --fs-3xl:2rem;
+  --fs-4xl:2.5rem;
+  --fs-word:clamp(2.5rem,4.5vw,3.75rem);
+
+  /* Motion */
+  --ease:cubic-bezier(.22,1,.36,1);
+  --ease-spring:cubic-bezier(.34,1.56,.64,1);
+  --t-fast:140ms;
+  --t-med:240ms;
+  --t-slow:420ms;
+}
+
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0b0e14;
+    --bg-2:#111620;
+    --surface:#161c28;
+    --surface-2:#1e2636;
+    --surface-3:#283246;
+    --line:#262f42;
+    --line-2:#364259;
+    --line-strong:#64728a;
+    --ink:#f3f5f8;
+    --ink-2:#c4cad4;
+    --muted:#8e98a8;
+    --brand:#3b82f6;
+    --brand-hover:#60a5fa;
+    --brand-ink:#08101d;
+    --brand-soft:rgba(59,130,246,.16);
+    --brand-text:#60a5fa;
+    --accent:#f59e0b;
+    --accent-text:#fbbf24;
+    --accent-soft:rgba(245,158,11,.16);
+    --arc-1:#3b82f6;
+    --arc-node:#f59e0b;
+    --good:#10b981;
+    --good-ink:#052e16;
+    --good-soft:rgba(16,185,129,.16);
+    --warn:#fbbf24;
+    --warn-ink:#1f1200;
+    --warn-soft:rgba(251,191,36,.16);
+    --bad:#f87171;
+    --bad-ink:#ffffff;
+    --bad-soft:rgba(239,68,68,.16);
+    --rec:#fb7185;
+    --rec-ink:#1f040a;
+    --rec-soft:rgba(251,113,133,.25);
+    --stage:#080b11;
+    --stage-2:#101622;
+    --shadow-1:0 1px 3px rgba(0,0,0,.35);
+    --shadow-2:0 8px 20px -4px rgba(0,0,0,.5);
+    --shadow-3:0 24px 40px -8px rgba(0,0,0,.65);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0b0e14;
+  --bg-2:#111620;
+  --surface:#161c28;
+  --surface-2:#1e2636;
+  --surface-3:#283246;
+  --line:#262f42;
+  --line-2:#364259;
+  --line-strong:#64728a;
+  --ink:#f3f5f8;
+  --ink-2:#c4cad4;
+  --muted:#8e98a8;
+  --brand:#3b82f6;
+  --brand-hover:#60a5fa;
+  --brand-ink:#08101d;
+  --brand-soft:rgba(59,130,246,.16);
+  --brand-text:#60a5fa;
+  --accent:#f59e0b;
+  --accent-text:#fbbf24;
+  --accent-soft:rgba(245,158,11,.16);
+  --arc-1:#3b82f6;
+  --arc-node:#f59e0b;
+  --good:#10b981;
+  --good-ink:#052e16;
+  --good-soft:rgba(16,185,129,.16);
+  --warn:#fbbf24;
+  --warn-ink:#1f1200;
+  --warn-soft:rgba(251,191,36,.16);
+  --bad:#f87171;
+  --bad-ink:#ffffff;
+  --bad-soft:rgba(239,68,68,.16);
+  --rec:#fb7185;
+  --rec-ink:#1f040a;
+  --rec-soft:rgba(251,113,133,.25);
+  --stage:#080b11;
+  --stage-2:#101622;
+  --shadow-1:0 1px 3px rgba(0,0,0,.35);
+  --shadow-2:0 8px 20px -4px rgba(0,0,0,.5);
+  --shadow-3:0 24px 40px -8px rgba(0,0,0,.65);
+}
+
+@media (prefers-reduced-motion:reduce){
+  :root{--t-fast:80ms;--t-med:80ms;--t-slow:80ms}
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:80ms!important;scroll-behavior:auto!important}
+}

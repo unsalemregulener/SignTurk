@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <title>SignTurk</title>
+  <rect width="64" height="64" rx="14" fill="#0B0F17"/>
+  <g transform="translate(7.59 0.76) scale(0.0772)">
+    <g stroke-width="110" stroke-linecap="round" stroke-linejoin="round">
+      <path stroke="#F59E0B" d="M368 97C330 135 265 190 240 225C215 262 215 330 245 370C275 405 330 420 365 438C395 455 410 480 410 520C412 560 405 600 380 630C340 675 290 690 240 690C170 690 115 655 85 598"/>
+      <path stroke="#F59E0B" d="M300 178C360 176 430 170 470 180C530 195 560 240 552 288"/>
+      <path stroke="#3B82F6" d="M200 110C150 170 70 260 70 370C70 460 140 548 240 548C330 548 385 470 385 362C470 358 558 430 562 540C566 650 480 712 390 712C350 712 310 702 285 688"/>
+      <path stroke="#F59E0B" d="M380 630C340 675 290 690 240 690"/>
+    </g>
+  </g>
+</svg>

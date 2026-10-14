@@ -77,7 +77,7 @@ def verify_pw(plain: str, hashed: str) -> bool:
 # ═══════════════════════════════════════════════════════════
 BASE_DIR     = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR / "frontend"
-UI_FILE      = FRONTEND_DIR / "signturk_ui.html"
+UI_FILE      = FRONTEND_DIR / "app" / "index.html"
 AVATAR_FILE  = FRONTEND_DIR / "avatar3d.html"
 
 # Per-word landmark sequences that drive the 3D avatar

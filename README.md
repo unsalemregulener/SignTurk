@@ -1,11 +1,17 @@
 # SignTurk
 
+[![CI](https://github.com/unsalemregulener/SignTurk/actions/workflows/ci.yml/badge.svg)](https://github.com/unsalemregulener/SignTurk/actions/workflows/ci.yml)
+[![Docker](https://github.com/unsalemregulener/SignTurk/actions/workflows/docker.yml/badge.svg)](https://github.com/unsalemregulener/SignTurk/actions/workflows/docker.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+**Outstanding Graduation Project** · Eastern Mediterranean University · 2025–2026
+
 Real-time Turkish Sign Language (TİD) recognition in the browser. Signs made
 in front of a webcam are recognised one at a time, from a short recording or
 hands-free, approved words are turned into a Turkish sentence, and a 3D avatar
 can play signs back. The interface and API messages are in Turkish.
 
-[![Live recognition of the sign "çay" (tea)](docs/images/cay-preview.gif)](docs/videos/cay.mp4)
+[![Hands-free translation: the signs ben, çay and sevmek become "Ben çayı seviyorum."](docs/images/demo-preview.gif)](docs/videos/signturk-demo.mp4)
 
 - **226 signs:** every sign in AUTSL, recognised from RTMW whole-body
   landmarks by a four-stream ensemble: 94.39% top-1 on the AUTSL test split.
@@ -18,7 +24,11 @@ can play signs back. The interface and API messages are in Turkish.
 - **Turkish sentence engine:** rule-based morphology turns glosses such as
   `ben çay içmek` into `Ben çay içiyorum.`
 - **3D avatar:** 226 recorded landmark sequences replayed on a rigged
-  three.js character, with captions, slow mode and loop.
+  three.js character, with captions, slow mode and loop. The dictionary and
+  every result show with it how a sign is made (**Nasıl yapılır?**).
+- **Interface:** home, translation, dictionary, history, settings and admin
+  pages in light and dark themes, with a three-step camera setup on the first
+  visit. Space records, Enter approves and Esc rejects.
 - **Accounts:** token login, per-user history and settings, admin pages for
   users, logs and model status.
 - **Storage:** SQLite with no setup, or PostgreSQL through `DATABASE_URL`.
@@ -27,12 +37,12 @@ can play signs back. The interface and API messages are in Turkish.
 
 ## Live recognition
 
-On the **Canlı Çeviri** page signs are read one at a time. In the **Kayıt**
+On the **Çeviri** page signs are read one at a time. In the **Kayıtla**
 mode each sign is recorded on its own:
 
-1. The user presses **İşareti kaydet**. After a 3-2-1 countdown the browser
-   captures four seconds of unmirrored frames at about 12 fps (48 frames) and
-   streams them to the server as it records.
+1. The user presses the record button or Space. After a 3-2-1 countdown the
+   browser captures four seconds of unmirrored frames at about 12 fps (48
+   frames) and streams them to the server as it records.
 2. For each frame the server runs RTMW whole-body pose estimation inside the
    person box of a YOLOX detector, which runs on every fourth frame. Of the 133
    keypoints it keeps 17 body points and 21 points per hand: 75 landmarks with
@@ -53,7 +63,7 @@ mode each sign is recorded on its own:
 Approved words are saved to the user's history, and the sentence engine
 rebuilds the sentence from all approved words.
 
-In the **Sürekli** (hands-free) mode the browser keeps sending frames and the
+In the **Düğmesiz** (hands-free) mode the browser keeps sending frames and the
 server watches the higher wrist. When the hands rise above their rest height
 and come back down for 0.3 s, the sign is cut out as in step 3, scored and
 offered for approval like a recording; a twitch shorter than half a second is
@@ -131,9 +141,9 @@ uvicorn backend:app --port 8000
 ```
 
 Open <http://127.0.0.1:8000>, register or sign in with the admin account, and
-allow camera access on the **Canlı Çeviri** page. The model loads in the
-background when the server starts; the admin **Model Durumu** page shows its
-state.
+allow camera access on the **Çeviri** page. The model loads in the
+background when the server starts; the home page and the admin
+**Yönetim → Model** tab show its state.
 
 With Docker:
 
@@ -224,7 +234,8 @@ research/model_226/    stream config, vocabulary, evaluation summary, model card
 landmark_smoother.py   smoothing applied to avatar landmark files
 database.py, models.py SQLAlchemy engine and tables
 text_processing/       Turkish sentence engine
-frontend/              interface (React from a CDN), avatar page, three.js r128, avatar.glb
+frontend/app/          interface: React from a CDN, one script per page, styles and brand files
+frontend/              avatar page, three.js r128, avatar.glb, fonts
 landmarks/             226 landmark sequences for the avatar
 tools/                 download_models.py, evaluate_226.py, evaluate_recording.py, extract_landmarks.py (avatar files from AUTSL)
 tests/                 unit tests, the end-to-end check (backend_smoke.py), the socket check
@@ -282,10 +293,11 @@ included; their use is governed by the dataset's own terms.
 
 ## Team and role
 
-SignTurk was built as a team graduation project. My part was the LLM/NLP and
-data workflows: dataset preparation, preprocessing, validation and
-sentence-generation pipeline integration. I also supported the interface and
-the 3D avatar integration.
+SignTurk was built as a team graduation project at Eastern Mediterranean
+University in 2025–2026 and was named an Outstanding Graduation Project. My
+part was the LLM/NLP and data workflows: dataset preparation, preprocessing,
+validation and sentence-generation pipeline integration. I also supported the
+interface and the 3D avatar integration.
 
 ## License
 

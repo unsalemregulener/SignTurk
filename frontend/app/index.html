@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>SignTurk</title>
+  <meta name="description" content="Türk İşaret Dili'ni kameradan tanır; onayladığınız kelimelerden Türkçe cümle kurar." />
+  <meta name="theme-color" content="#f7f6f2" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0b0e14" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="SignTurk" />
+  <meta property="og:description" content="Türk İşaret Dili'ni kameradan tanıyan, onayladığınız kelimelerden cümle kuran uygulama." />
+  <meta property="og:image" content="/frontend/app/brand/og.png?v=2" />
+  <link rel="icon" href="/frontend/app/brand/favicon.svg?v=2" type="image/svg+xml" />
+  <link rel="icon" href="/frontend/app/brand/favicon-32.png?v=2" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="/frontend/app/brand/icon-180.png?v=2" />
+  <!-- Turkish needs both subsets: ç ö ü ı are in latin, ğ ş İ in latin-ext -->
+  <link rel="preload" href="/frontend/fonts/plus-jakarta-sans-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/frontend/fonts/plus-jakarta-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/frontend/fonts/lexend-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/frontend/fonts/lexend-latin-ext.woff2" as="font" type="font/woff2" crossorigin />
+  <script>
+    // The chosen theme before anything paints, so a dark choice never flashes light.
+    try{ var t = localStorage.getItem("signturk_theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; }catch(e){}
+  </script>
+  <link rel="stylesheet" href="/frontend/app/styles/tokens.css" />
+  <link rel="stylesheet" href="/frontend/app/styles/app.css" />
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.9/babel.min.js" crossorigin="anonymous"></script>
+  <script src="/frontend/app/js/icons.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react" src="/frontend/app/js/core.jsx"></script>
+  <script type="text/babel" data-presets="react" src="/frontend/app/js/ui.jsx"></script>
+  <script type="text/babel" data-presets="react" src="/frontend/app/js/live.jsx"></script>
+  <script type="text/babel" data-presets="react" src="/frontend/app/js/pages/auth.jsx"></script>
+  <script type="text/babel" data-presets="react" src="/frontend/app/js/pages/home.jsx"></script>
+  <script type="text/babel" data-presets="react" src="/frontend/app/js/pages/translate.jsx"></script>
+  <script type="text/babel" data-presets="react" src="/frontend/app/js/pages/dictionary.jsx"></script>
+  <script type="text/babel" data-presets="react" src="/frontend/app/js/pages/history.jsx"></script>
+  <script type="text/babel" data-presets="react" src="/frontend/app/js/pages/settings.jsx"></script>
+  <script type="text/babel" data-presets="react" src="/frontend/app/js/pages/admin.jsx"></script>
+  <script type="text/babel" data-presets="react" src="/frontend/app/js/main.jsx"></script>
+</body>
+</html>

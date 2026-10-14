@@ -11,6 +11,9 @@ time or installed with it. They keep their own licenses and terms.
 | three.js r128 | `frontend/three.min.js`, `frontend/GLTFLoader.js`, `frontend/OrbitControls.js` | MIT, Copyright 2010-2021 Three.js Authors |
 | Mixamo character "Ch08" | `frontend/avatar.glb` (textures resized) | Adobe Mixamo terms of use, not the MIT License |
 | YOLOX and RTMPose code adapted from [rtmlib](https://github.com/Tau-J/rtmlib) 0.0.16 | `signturk_runtime/rtm.py` | Apache-2.0, see [LICENSES/rtmlib-Apache-2.0.txt](LICENSES/rtmlib-Apache-2.0.txt); the changes are listed at the top of the file |
+| Plus Jakarta Sans | `frontend/fonts/plus-jakarta-sans-*.woff2` | SIL Open Font License 1.1, see [frontend/fonts/OFL-PlusJakartaSans.txt](frontend/fonts/OFL-PlusJakartaSans.txt) |
+| Lexend | `frontend/fonts/lexend-*.woff2` | SIL Open Font License 1.1, see [frontend/fonts/OFL-Lexend.txt](frontend/fonts/OFL-Lexend.txt) |
+| Phosphor Icons 2.1.1 (regular and duotone paths) | `frontend/app/js/icons.js` | MIT, Copyright (c) 2023 Phosphor Icons |
 | Landmark sequences derived from AUTSL | `landmarks/*.json` | see [AUTSL](#autsl) |
 | Model metadata derived from AUTSL | `research/model_226/` (vocabulary, English names, evaluation summary) | see [AUTSL](#autsl) |
 
@@ -45,7 +48,6 @@ before redistributing the derived files or using them commercially.
 | --- | --- | --- |
 | React, ReactDOM | 18.3.1 | MIT |
 | @babel/standalone | 7.29.9 | MIT |
-| lucide | 1.21.0 | ISC |
 
 ## Python packages
 
