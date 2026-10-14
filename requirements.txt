@@ -18,7 +18,7 @@ onnxruntime==1.30.0       # runs the RTMW pose and YOLOX person models (signturk
 
 # ── Database ──────────────────────────────────────────────
 sqlalchemy==2.1.4
-psycopg[binary]==3.2.9
+psycopg[binary]==3.3.6
 
 # ── Auth / Validation ─────────────────────────────────────
 passlib==1.7.4
