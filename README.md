@@ -1,9 +1,9 @@
 # SignTurk
 
-Real-time Turkish Sign Language (TİD) recognition in the browser. Signs
-recorded with a webcam are recognised one at a time, approved words are turned
-into a Turkish sentence, and a 3D avatar can play signs back. The interface and
-API messages are in Turkish.
+Real-time Turkish Sign Language (TİD) recognition in the browser. Signs made
+in front of a webcam are recognised one at a time, from a short recording or
+hands-free, approved words are turned into a Turkish sentence, and a 3D avatar
+can play signs back. The interface and API messages are in Turkish.
 
 [![Live recognition of the sign "çay" (tea)](docs/images/cay-preview.gif)](docs/videos/cay.mp4)
 
@@ -11,6 +11,9 @@ API messages are in Turkish.
   landmarks by a four-stream ensemble: 94.39% top-1 on the AUTSL test split.
 - **Approval step:** a prediction enters the sentence only after the user
   accepts it, so a wrong guess can be rejected first.
+- **Hands-free mode:** with a GPU the page can watch the camera without a
+  record button. Each sign is cut out of the stream once the hands come back
+  down, and a confident result goes straight into the sentence.
 - **Turkish sentence engine:** rule-based morphology turns glosses such as
   `ben çay içmek` into `Ben çay içiyorum.`
 - **3D avatar:** 226 recorded landmark sequences replayed on a rigged
@@ -47,6 +50,14 @@ On the **Canlı Çeviri** page each sign is recorded on its own.
 
 Approved words are saved to the user's history, and the sentence engine
 rebuilds the sentence from all approved words.
+
+In the **Sürekli** (hands-free) mode the browser keeps sending frames and the
+server watches the higher wrist. When the hands rise above their rest height
+and come back down for 0.4 s, the sign is cut out as in step 3 and scored. A
+result that passes the thresholds goes straight into the sentence (**Geri al**
+removes it); any other result waits for the user's choice. Every frame has to
+be processed within the camera's 83 ms, so the mode is offered when frames are
+fast enough, in practice on a GPU.
 
 ## Model
 
@@ -126,6 +137,7 @@ Settings are read from the environment or from a `.env` file
 | `SIGNTURK_ENABLE_226` | `1` | `0` skips loading the model, for example to work on the other pages |
 | `SIGNTURK_226_DETECT_EVERY` | `4` | run the person detector on every Nth frame of a recording and reuse its box in between |
 | `SIGNTURK_226_DEVICE` | `auto` | `cuda` or `cpu`; `auto` uses CUDA when ONNX Runtime has it |
+| `SIGNTURK_CONTINUOUS` | `auto` | hands-free mode: `auto` offers it while a frame takes at most 60 ms (on a GPU before the first frame), `on` always, `off` never |
 | `HF_TOKEN`, `SIGNAI_*` | off | optional ML layer for the sentence engine, see [`text_processing`](text_processing/README.md) |
 
 There are no built-in accounts. Without the admin variables the application
@@ -157,6 +169,10 @@ which keeps it out of URLs and access logs.
 
 The live socket also accepts `approve` (optionally with a `word`), `reject`,
 `undo` and `reset_sentence` actions and answers with `sentence_update`.
+`{"action": "continuous", "auto_approve": true}` switches it to the hands-free
+mode (`"on": false` switches back): every frame is answered with
+`{"type": "watching", "state": "waiting" | "signing" | "reading"}`, and every
+sign cut out of the stream with a `result`.
 
 ## Project layout
 
@@ -204,7 +220,9 @@ from the whole recording and from the cut.
 
 ## Scope
 
-- SignTurk recognises isolated signs, one at a time.
+- SignTurk recognises isolated signs, one at a time. In the hands-free mode
+  the hands have to come back down between signs; signs that run into each
+  other are read as one.
 - A [GPU](#gpu) keeps the live page responsive; on a CPU a recorded sign takes
   a few seconds to process.
 - The sentence engine is rule-based and covers common sentence patterns.

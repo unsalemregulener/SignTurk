@@ -613,6 +613,7 @@ const CLIP_FRAMES = 48;
 const CLIP_INTERVAL_MS = 83;
 
 function recordFrames(model){ return model?.record_frames || CLIP_FRAMES; }
+const WATCH_LABELS = {waiting:"Bekliyor", signing:"İşaret", reading:"Okunuyor"};
 function recordSeconds(model){ return Math.round(recordFrames(model) / (model?.camera_fps || 12)); }
 const MODEL_STATES = {ready:"Hazır", loading:"Yükleniyor", idle:"Bekliyor", missing:"Dosyalar eksik", error:"Hata", disabled:"Kapalı"};
 const DEVICE_NAMES = {cuda:"GPU", cpu:"CPU"};
@@ -804,7 +805,7 @@ function Shell({user, setUser}){
   }[active] || <Dashboard navigate={navigate} health={health}/>;
   const title = {
     dashboard:["Panel","Sistem, model ve son kayıtlar"],
-    live:["Canlı Çeviri","Her işaret ayrı kaydedilir"],
+    live:["Canlı Çeviri","İşaretler tek tek tanınır: kayıtla ya da düğmesiz"],
     dictionary:["Sözlük","226 işaret, Türkçe ve İngilizce"],
     avatar3d:["3D Animasyon","Kayıtlı işaret animasyonları"],
     history:["Geçmiş","Başarılı canlı tahmin kayıtları"],
@@ -880,7 +881,7 @@ function Dashboard({navigate, health}){
       </div>
       <div className="grid cols-2">
         <section className="panel">
-          <div className="panel-head"><div><h3>Canlı Çeviri</h3><span>Her işaret ayrı kaydedilir</span></div><button className="btn primary" onClick={() => navigate("live")}><Icon name="Play"/> Başlat</button></div>
+          <div className="panel-head"><div><h3>Canlı Çeviri</h3><span>Kayıtla ya da düğmesiz</span></div><button className="btn primary" onClick={() => navigate("live")}><Icon name="Play"/> Başlat</button></div>
           <div className="panel-body">
             <div className="grid cols-3">
               <Metric label="Kayıt" value="~12 kare/sn" sub="kamera gönderimi" icon="Radio" ok/>
@@ -927,10 +928,16 @@ function LivePage(){
   const [countdown, setCountdown] = useState(0);
   const [clipProgress, setClipProgress] = useState({sent:0, processed:0});
   const [result, setResult] = useState(null);
+  const [mode, setMode] = useState("record");   // record, continuous (hands-free)
+  const [watch, setWatch] = useState("off");    // off, waiting, signing, reading
+  const modeRef = useRef("record");
+  const streamTimerRef = useRef(null);
+  const inFlightRef = useRef(0);
   const [health] = useHealth(true);
   const model = health?.model_226;
   const ready = !!model?.ready;
   const clipFrames = recordFrames(model);
+  const canContinuous = !!model?.continuous;
   useEffect(() => {
     apiFetch(API.endpoints.settings).then(s => {
       setSpeech(!!s?.tts_enabled);
@@ -952,6 +959,9 @@ function LivePage(){
 
   const stopLive = useCallback(() => {
     if (clipTimerRef.current){ clearTimeout(clipTimerRef.current); clearInterval(clipTimerRef.current); clipTimerRef.current = null; }
+    if (streamTimerRef.current){ clearInterval(streamTimerRef.current); streamTimerRef.current = null; }
+    inFlightRef.current = 0;
+    setWatch("off");
     setClipState("idle");
     setCountdown(0);
     if (wsRef.current){
@@ -1049,6 +1059,43 @@ function LivePage(){
     clipTimerRef.current = setTimeout(tick, 1000);
   }, [clipState, clipFrames, captureFrame, sendAction]);
 
+  const stopStream = useCallback(() => {
+    if (streamTimerRef.current){ clearInterval(streamTimerRef.current); streamTimerRef.current = null; }
+    inFlightRef.current = 0;
+    setWatch("off");
+  }, []);
+
+  // Hands-free: frames go out without a button, at most two awaiting an answer.
+  // The server cuts each sign out of the stream; confident ones enter the sentence.
+  const startStream = useCallback(() => {
+    stopStream();
+    setResult(null);
+    setPending(null);
+    sendAction({action:"continuous", auto_approve:true});
+    setWatch("waiting");
+    setStatus("İşaret bekleniyor · her işaretten sonra ellerinizi indirin");
+    streamTimerRef.current = setInterval(() => {
+      if (inFlightRef.current >= 2) return;
+      const image = captureFrame();
+      if (!image) return;
+      inFlightRef.current += 1;
+      sendAction({image});
+    }, CLIP_INTERVAL_MS);
+  }, [captureFrame, sendAction, stopStream]);
+
+  const chooseMode = useCallback((next) => {
+    if (next === modeRef.current || clipState !== "idle") return;
+    modeRef.current = next;
+    setMode(next);
+    if (!running) return;
+    if (next === "continuous") startStream();
+    else{
+      stopStream();
+      sendAction({action:"continuous", on:false});
+      setStatus("Hazır · işareti kaydedin");
+    }
+  }, [clipState, running, startStream, stopStream, sendAction]);
+
   const startLive = useCallback(async () => {
     setStarting(true);
     setError("");
@@ -1079,6 +1126,7 @@ function LivePage(){
         setResult(null);
         setClipState("idle");
         setStatus("Hazır · işareti kaydedin");
+        if (modeRef.current === "continuous") startStream();
       };
       ws.onmessage = (event) => {
         try{
@@ -1088,6 +1136,20 @@ function LivePage(){
             return;
           }
           if (data.type === "recording") return;
+          if (data.type === "continuous"){
+            if (!data.on && modeRef.current === "continuous"){
+              stopStream();
+              modeRef.current = "record";
+              setMode("record");
+              if (data.error) setError(data.error);
+            }
+            return;
+          }
+          if (data.type === "watching"){
+            inFlightRef.current = Math.max(0, inFlightRef.current - 1);
+            if (modeRef.current === "continuous") setWatch(data.state);
+            return;
+          }
           if (data.type === "progress"){
             setClipProgress(prev => ({...prev, processed:data.processed || 0}));
             return;
@@ -1132,7 +1194,7 @@ function LivePage(){
     }finally{
       setStarting(false);
     }
-  }, [deviceId, loadDevices, stopLive, starting, speak]);
+  }, [deviceId, loadDevices, stopLive, starting, speak, startStream, stopStream]);
 
   const top = result?.top || [];
   const hasPrediction = top.length > 0;
@@ -1145,7 +1207,9 @@ function LivePage(){
     processing: `İşleniyor ${clipProgress.processed}/${clipFrames}`,
   }[clipState];
   const displayLabel = clipLabel
-    || (hasPrediction ? (confident ? top[0].text_tr : `(${top[0].text_tr}?)`) : (running ? "Kayda hazır" : "Hazır"));
+    || (mode === "continuous" ? {signing:"İşaret algılandı", reading:"Okunuyor"}[watch] : null)
+    || (hasPrediction ? (confident ? top[0].text_tr : `(${top[0].text_tr}?)`)
+      : (running ? (mode === "continuous" ? "İşaret bekleniyor" : "Kayda hazır") : "Hazır"));
   const signFrames = result?.sign_frames ? result.sign_frames[1] - result.sign_frames[0] + 1 : null;
   const displaySub = hasPrediction
     ? `AUTSL ${top[0].class_id} · ${signFrames ? `işaret ${signFrames}/${result.frames} kare` : `${result.frames} kare`} · model ${Math.round(result.model_ms)} ms`
@@ -1160,10 +1224,16 @@ function LivePage(){
         <div className="camera-top">
           <div className="camera-title">
             <strong>SIGNTURK Kamera</strong>
+            <div className="mode-switch">
+              <button className={mode === "record" ? "active" : ""} onClick={() => chooseMode("record")} disabled={clipState !== "idle"}>Kayıt</button>
+              <button className={mode === "continuous" ? "active" : ""} onClick={() => chooseMode("continuous")}
+                disabled={!canContinuous || clipState !== "idle"}
+                title={canContinuous ? "Düğmesiz: her işaret kendiliğinden okunur" : "Düğmesiz mod GPU ister"}>Sürekli</button>
+            </div>
           </div>
           <div className="camera-meta">
             <span className={`dark-chip ${running ? "ok" : ""}`}><Icon name={running ? "Wifi" : "WifiOff"} size={14}/> {running ? "Açık" : "Kapalı"}</span>
-            <span className="dark-chip"><Icon name="Layers" size={14}/> {clipProgress.processed}/{clipFrames}</span>
+            <span className={`dark-chip ${mode === "continuous" && watch === "signing" ? "ok" : ""}`}><Icon name="Layers" size={14}/> {mode === "continuous" ? (WATCH_LABELS[watch] || "Kapalı") : `${clipProgress.processed}/${clipFrames}`}</span>
           </div>
         </div>
         <div className="video-wrap">
@@ -1173,7 +1243,9 @@ function LivePage(){
               <div>
                 <Icon name="Camera" size={38}/>
                 <h3>Kamera bekliyor</h3>
-                <p>Başlattıktan sonra her işareti "İşareti kaydet" ile ayrı kaydedin.</p>
+                <p>{mode === "continuous"
+                  ? "Başlattıktan sonra işaret yapın ve her işaretten sonra ellerinizi indirin."
+                  : "Başlattıktan sonra her işareti \"İşareti kaydet\" ile ayrı kaydedin."}</p>
               </div>
             </div>
           )}
@@ -1187,7 +1259,7 @@ function LivePage(){
             ) : (
               <button className="btn red" onClick={stopLive}><Icon name="Square"/> Durdur</button>
             )}
-            {running && (
+            {running && mode === "record" && (
               <button className="btn primary" onClick={recordSign} disabled={clipState !== "idle"}><Icon name="Video"/> İşareti kaydet</button>
             )}
             <button className="btn" onClick={() => setMirrorPreview(v => !v)}><Icon name="RefreshCw"/> Önizleme</button>

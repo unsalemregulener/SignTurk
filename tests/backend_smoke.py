@@ -109,6 +109,18 @@ def record(ws, clip):
     return started, ws.receive_json(), processed
 
 
+def stream(ws, frames):
+    """Frames in the hands-free mode with auto_approve; the results and sentence updates that came back."""
+    found, updates = [], []
+    for frame in frames:
+        ws.send_text(json.dumps({"image": frame}))
+        if ws.receive_json().get("state") == "reading":
+            found.append(ws.receive_json())
+            if found[-1].get("pending_word"):   # confident: approved at once
+                updates.append(ws.receive_json())
+    return found, updates
+
+
 with TestClient(backend.app) as client:
     health = client.get("/api/health").json()
     check("health ok", health.get("status") == "ok", health)
@@ -250,6 +262,27 @@ with TestClient(backend.app) as client:
               f"{[(row['gloss'], row['confidence']) for row in other.get('top', [])]} | "
               f"detect {timing['avg_detect_ms']} ms, pose {timing['avg_pose_ms']} ms per frame")
         check("the other detection setting also works", len(other.get("top", [])) == 3, other)
+
+        # Hands-free: a second of rest, then the whole video, whose sign ends in rest
+        setting = backend.LIVE226.continuous_setting
+        check("health tells whether the hands-free mode is offered",
+              isinstance(client.get("/api/health").json()["model_226"].get("continuous"), bool))
+        backend.LIVE226.continuous_setting = "off"
+        with live_socket(client, user_token) as ws:
+            ws.send_text(json.dumps({"action": "continuous"}))
+            reply = ws.receive_json()
+            check("the hands-free mode is refused when it is off", reply.get("on") is False and reply.get("error"), reply)
+        backend.LIVE226.continuous_setting = "on"
+        with live_socket(client, user_token) as ws:
+            ws.send_text(json.dumps({"action": "continuous", "auto_approve": True}))
+            check("the hands-free mode starts", ws.receive_json().get("on") is True)
+            found, updates = stream(ws, camera_recording(video, seconds=7.5, rest_first=1.0))
+        backend.LIVE226.continuous_setting = setting
+        print(f"     hands-free stream: {[(r['top'][0]['gloss'], r['top'][0]['confidence'], r['frames']) for r in found]}")
+        check("the stream holds one sign", len(found) == 1, found)
+        check("the hands-free sign is cay", bool(found) and found[0]["top"][0]["gloss"] == "cay", found)
+        check("a confident sign enters the sentence by itself",
+              bool(updates) and updates[-1].get("words") == ["cay"] and updates[-1].get("added") == "cay", updates)
 
     client.post("/api/logout", headers=U)
     check("token revoked after logout", client.get("/api/history", headers=U).status_code == 401)

@@ -2,7 +2,9 @@
 
 The browser records four seconds and streams the frames. The server extracts
 landmarks from each frame as it arrives (`landmarks`); once the recording is
-complete it cuts the sign out of it and asks the ensemble (`predict`).
+complete it cuts the sign out of it and asks the ensemble (`predict`). In the
+hands-free mode the frames keep coming and signturk_runtime.segment.Segmenter
+cuts each sign out of the stream.
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ import numpy as np
 from signturk_runtime.config import load_config, load_vocabulary, missing_files
 from signturk_runtime.features import build_feature_bundle, hand_motion
 from signturk_runtime.pose_quality import evaluate_pose_quality
-from signturk_runtime.segment import sign_clip
+from signturk_runtime.segment import resample, sign_clip
 from text_processing.lexicon import restore_turkish
 
 logger = logging.getLogger("signturk")
@@ -30,6 +32,8 @@ MAX_FRAME_WIDTH = 640
 # The live page records 4 seconds at 12 frames per second.
 CAMERA_FPS = 12
 RECORD_FRAMES = 48
+# The hands-free mode needs every frame done well within the camera's 83 ms.
+CONTINUOUS_MAX_FRAME_MS = 60.0
 
 
 def prepare_frame(frame_bgr: np.ndarray) -> np.ndarray:
@@ -49,6 +53,8 @@ class Live226:
         self.enabled = os.environ.get("SIGNTURK_ENABLE_226", "1").strip().lower() not in {"0", "false", "no"}
         # Run the person detector on every Nth frame and reuse its box in between.
         self.detect_every = max(1, int(os.environ.get("SIGNTURK_226_DETECT_EVERY", "4")))
+        # The hands-free mode: auto (when frames are fast enough), on or off.
+        self.continuous_setting = os.environ.get("SIGNTURK_CONTINUOUS", "auto").strip().lower()
         self.state = "idle" if self.enabled else "disabled"   # idle, loading, ready, missing, error, disabled
         self.message = "" if self.enabled else "SIGNTURK_ENABLE_226=0 ile kapatıldı"
         self.device = None
@@ -66,6 +72,17 @@ class Live226:
     def ready(self) -> bool:
         return self.state == "ready"
 
+    @property
+    def continuous_ok(self) -> bool:
+        """Whether the hands-free mode is offered. With "auto" the frames must be fast enough:
+        by the measured frame time, or before any frame, on a GPU."""
+        if not self.ready or self.continuous_setting in {"0", "off", "false", "no"}:
+            return False
+        if self.continuous_setting in {"1", "on", "true", "yes"}:
+            return True
+        measured = self._average(self.frame_ms)
+        return measured <= CONTINUOUS_MAX_FRAME_MS if measured is not None else self.device == "cuda"
+
     def status(self) -> dict:
         return {
             "enabled": self.enabled,
@@ -77,6 +94,7 @@ class Live226:
             "frame_count": self.frame_count,
             "record_frames": RECORD_FRAMES,
             "camera_fps": CAMERA_FPS,
+            "continuous": self.continuous_ok,
             "thresholds": self.config["thresholds"],
             "detect_every": self.detect_every,
             "avg_frame_ms": self._average(self.frame_ms),
@@ -133,9 +151,13 @@ class Live226:
         self.pose_ms.append(getattr(self.extractor, "last_pose_ms", 0.0))
         return result
 
-    def predict(self, clip: list) -> dict:
-        """Top-3 for a recording of per-frame landmarks, read from the sign's span when one is found."""
-        window, span = sign_clip(np.stack(clip), CAMERA_FPS, self.frame_count)
+    def predict(self, clip: list, cut: bool = True) -> dict:
+        """Top-3 for per-frame landmarks: a recording, read from the sign's span when one is found,
+        or with `cut=False` a sign the Segmenter has already cut out."""
+        if cut:
+            window, span = sign_clip(np.stack(clip), CAMERA_FPS, self.frame_count)
+        else:
+            window, span = resample(np.stack(clip), self.frame_count), None
         started = time.perf_counter()
         probabilities = self.ensemble.predict(build_feature_bundle(window))
         latency_ms = (time.perf_counter() - started) * 1000.0

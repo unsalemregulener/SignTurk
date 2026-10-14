@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from signturk_runtime.features import LANDMARK_DIM, TOTAL_LANDMARKS
-from signturk_runtime.segment import active_span, resample, sign_clip, wrist_height
+from signturk_runtime.segment import Segmenter, active_span, resample, sign_clip, wrist_height
 
 FPS = 12
 SHOULDER_Y, SHOULDER_WIDTH = 0.5, 0.2
@@ -71,6 +71,35 @@ class ResampleTests(unittest.TestCase):
         window, span = sign_clip(recording(SIGN), FPS, 32)
         self.assertEqual(window.shape[0], 32)
         np.testing.assert_allclose(window[0], recording(SIGN)[span[0]])
+
+
+class SegmenterTests(unittest.TestCase):
+    @staticmethod
+    def cuts(heights, **options):
+        """(stream position when cut, (first, last), frames) for every sign the Segmenter returns."""
+        segmenter, found = Segmenter(FPS, **options), []
+        for position, landmarks in enumerate(recording(heights)):
+            cut = segmenter.push(landmarks)
+            if cut is not None:
+                found.append((position, cut[1], len(cut[0])))
+        return found
+
+    def test_each_sign_is_cut_once_after_the_hands_rest(self):
+        found = self.cuts(SIGN + SIGN[12:])       # rest, sign, rest, sign, rest
+        self.assertEqual(len(found), 2, found)
+        (position, (first, last), frames), (_, (second_first, _), _) = found
+        self.assertTrue(9 <= first <= 12 and 35 <= last <= 38, found)
+        self.assertLessEqual(position - 36, 6)    # within half a second of the hands resting
+        self.assertEqual(frames, last - first + 1)
+        self.assertTrue(45 <= second_first <= 48, found)
+
+    def test_rest_alone_gives_nothing(self):
+        self.assertEqual(self.cuts([REST, 1.35] * 60), [])
+        self.assertEqual(self.cuts([None] * 60), [])
+
+    def test_hands_kept_up_are_cut_once(self):
+        found = self.cuts([REST] * 12 + [0.0] * 120 + [REST] * 24, max_seconds=4.0)
+        self.assertEqual(len(found), 1, found)
 
 
 if __name__ == "__main__":

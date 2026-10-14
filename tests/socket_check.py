@@ -34,8 +34,9 @@ def post(url, payload):
         return json.loads(response.read())
 
 
-def camera_recording(path, seconds=4.0, fps=12):
-    """`seconds` of the recorded camera panel at `fps`, unmirrored, as JPEG data URLs (see backend_smoke.py)."""
+def camera_recording(path, seconds=4.0, rest_first=0.0, fps=12):
+    """`seconds` of the recorded camera panel at `fps`, unmirrored, as JPEG data URLs; the first
+    `rest_first` seconds at rest (see backend_smoke.py)."""
     capture = cv2.VideoCapture(path)
     frames = []
     while True:
@@ -44,9 +45,12 @@ def camera_recording(path, seconds=4.0, fps=12):
             break
         frames.append(cv2.flip(frame[222:612, 256:882], 1))
     capture.release()
+    rest = frames[int(4.5 * 30):]
+    picked = [rest[int(round(i * 30 / fps)) % len(rest)] for i in range(int(round(rest_first * fps)))]
+    picked += [frames[int(round(i * 30 / fps))] for i in range(int(round((seconds - rest_first) * fps)))]
     clip = []
-    for index in range(int(round(seconds * fps))):
-        ok, jpeg = cv2.imencode(".jpg", frames[int(round(index * 30 / fps))], [cv2.IMWRITE_JPEG_QUALITY, 85])
+    for frame in picked:
+        ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
         clip.append("data:image/jpeg;base64," + base64.b64encode(jpeg.tobytes()).decode("ascii"))
     return clip
 
@@ -87,6 +91,25 @@ def main() -> int:
         top = result.get("top", [])
         print("     cay clip:", [(row["gloss"], row["confidence"]) for row in top])
         check("the cay recording is recognised", bool(top) and top[0]["gloss"] == "cay", result)
+
+    # Hands-free: a second of rest, then the whole video, whose sign ends in rest
+    with connect(f"{ws_url}/api/predict/live226") as ws:
+        ws.send(json.dumps({"action": "auth", "token": token}))
+        ws.send(json.dumps({"action": "continuous", "auto_approve": True}))
+        reply = json.loads(ws.recv(timeout=60))
+        if not reply.get("on"):
+            print("     the hands-free mode is not offered here; SIGNTURK_CONTINUOUS=on tests it anyway")
+        else:
+            found = []
+            for frame in camera_recording(args.video, seconds=7.5, rest_first=1.0):
+                ws.send(json.dumps({"image": frame}))
+                if json.loads(ws.recv(timeout=120)).get("state") == "reading":
+                    found.append(json.loads(ws.recv(timeout=120)))
+                    if found[-1].get("pending_word"):
+                        ws.recv(timeout=120)   # the sentence update of the approved sign
+            print("     hands-free stream:", [(r["top"][0]["gloss"], r["top"][0]["confidence"]) for r in found])
+            check("the hands-free stream holds one sign, cay",
+                  len(found) == 1 and found[0]["top"][0]["gloss"] == "cay", found)
 
     print(f"{len(FAILURES)} failed" if FAILURES else "all socket checks passed")
     return 1 if FAILURES else 0

@@ -33,9 +33,10 @@ from sqlalchemy.orm import Session
 from database import engine, get_db, Base, database_name
 import models
 from text_processing.lexicon import restore_turkish, restore_turkish_words
-from live226 import Live226, prepare_frame
+from live226 import CAMERA_FPS, Live226, prepare_frame
 from rate_limit import SlidingWindowLimiter
 from signturk_runtime.config import missing_files
+from signturk_runtime.segment import Segmenter
 
 # ── Landmark smoothing ───────────────────────────────────
 try:
@@ -518,14 +519,21 @@ MAX_CLIP_FRAMES = 96
 
 @app.websocket("/api/predict/live226")
 async def live226_predict(websocket: WebSocket):
-    """One recorded sign at a time with the 226-class ensemble.
+    """Recorded signs, or hands-free signing, with the 226-class ensemble.
 
     After {"action": "auth", "token": ...} the client sends {"action": "start"},
-    the clip's unmirrored frames as
-    {"image": data_url}, then {"action": "end"}. Each frame is processed as it
-    arrives ({"type": "progress"}); "end" returns {"type": "result"} with the
-    top three signs. The approval actions (approve, reject, undo,
-    reset_sentence) answer with {"type": "sentence_update"} or "rejected".
+    the recording's unmirrored frames as {"image": data_url}, then
+    {"action": "end"}. Each frame is processed as it arrives
+    ({"type": "progress"}); "end" returns {"type": "result"} with the top three
+    signs. The approval actions (approve, reject, undo, reset_sentence) answer
+    with {"type": "sentence_update"} or "rejected".
+
+    {"action": "continuous"} turns on the hands-free mode when the server is
+    fast enough, and {"action": "continuous", "on": false} turns it off. Frames
+    then keep coming; each is answered with {"type": "watching", "state":
+    "waiting" | "signing" | "reading"}, and every sign cut out of the stream
+    returns a result. With "auto_approve" a confident result goes straight into
+    the sentence.
     """
     identity = await _authenticate_socket(websocket)
     if identity is None:
@@ -540,6 +548,9 @@ async def live226_predict(websocket: WebSocket):
     session = SentenceSession(db, user_id, mode="Live226")
     clip: List[np.ndarray] = []
     boxes = None
+    segmenter: Optional[Segmenter] = None
+    auto_approve = False
+    streamed = 0
     try:
         while True:
             try:
@@ -551,7 +562,17 @@ async def live226_predict(websocket: WebSocket):
             action = payload.get("action")
             if action in SENTENCE_ACTIONS:
                 await websocket.send_json(session.handle(action, payload))
+            elif action == "continuous":
+                wanted = payload.get("on", True) is not False
+                on = wanted and LIVE226.continuous_ok
+                segmenter, boxes, streamed = (Segmenter(CAMERA_FPS) if on else None), None, 0
+                auto_approve = bool(payload.get("auto_approve"))
+                reply = {"type": "continuous", "on": on}
+                if wanted and not on:
+                    reply["error"] = "Düğmesiz mod için sunucu yeterince hızlı değil"
+                await websocket.send_json(reply)
             elif action == "start":
+                segmenter = None
                 clip, boxes = [], None
                 await websocket.send_json({"type": "recording", "frame_count": LIVE226.frame_count})
             elif action == "end":
@@ -564,16 +585,34 @@ async def live226_predict(websocket: WebSocket):
                                     candidate=top[0]["gloss"] if result["confident"] else None)
                     await websocket.send_json({"type": "result", "frames": len(clip), **result, **session.pending()})
                 clip, boxes = [], None
-            elif payload.get("image") and len(clip) < MAX_CLIP_FRAMES:
+            elif payload.get("image") and (segmenter is not None or len(clip) < MAX_CLIP_FRAMES):
                 frame = decode_base64_image(payload["image"])
                 if frame is None:
                     continue
                 # Detect on every Nth frame, and on every frame while nobody has been found
+                index = streamed if segmenter is not None else len(clip)
                 found = boxes is not None and len(boxes) > 0
-                reuse = boxes if found and len(clip) % LIVE226.detect_every else None
+                reuse = boxes if found and index % LIVE226.detect_every else None
                 landmarks, boxes = await asyncio.to_thread(LIVE226.landmarks, prepare_frame(frame), reuse)
-                clip.append(landmarks)
-                await websocket.send_json({"type": "progress", "processed": len(clip)})
+                if segmenter is None:
+                    clip.append(landmarks)
+                    await websocket.send_json({"type": "progress", "processed": len(clip)})
+                    continue
+                streamed += 1
+                cut = segmenter.push(landmarks)
+                if cut is None:
+                    await websocket.send_json({"type": "watching", "state": "signing" if segmenter.signing else "waiting"})
+                    continue
+                await websocket.send_json({"type": "watching", "state": "reading"})
+                sign = list(cut[0])
+                result = await asyncio.to_thread(LIVE226.predict, sign, False)
+                top = result["top"]
+                candidate = top[0]["gloss"] if result["confident"] else None
+                session.present({row["gloss"]: row["confidence"] for row in top}, candidate=candidate)
+                await websocket.send_json({"type": "result", "continuous": True, "frames": len(sign),
+                                           **result, **session.pending()})
+                if candidate and auto_approve:
+                    await websocket.send_json(session.handle("approve", {"word": candidate}))
     except WebSocketDisconnect:
         add_log_db(db, "Info", "226 canlı akış kapandı", user_email)
     except Exception as e:
