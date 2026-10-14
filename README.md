@@ -61,6 +61,28 @@ and **Geri al** removes it. Every frame has to be processed within the
 camera's 83 ms, so the mode is offered when frames are fast enough, in
 practice on a GPU.
 
+### Measured on AUTSL
+
+[`tools/evaluate_recording.py`](tools/evaluate_recording.py) turns the 3,742
+clips of AUTSL's test split into what the live page sees: frames at 12 fps,
+landmarks with the detector on every fourth frame, and the signer at rest
+before and after the sign.
+
+| Test split | Top-1 |
+| --- | ---: |
+| The clip alone at 12 fps | 93.80% |
+| The earlier 2.7 s recording, sign starting within 0.7 s | 89.87–91.15% |
+| 4 s recording read whole, sign starting within 2 s | 76.27–78.81% |
+| 4 s recording cut, sign starting within 2 s | 92.28–92.94% |
+
+In streams of five signs by one signer, with 0.3–1.5 s of rest between them,
+the hands-free mode cut out 94.5% of the signs and read 92.8% of those
+correctly; 5.3 cuts per 100 signs matched no sign. Of the results confident
+enough to be offered, 98.0% were right, and a sign was cut 0.17 s (median)
+after its clip ended. The settings were chosen on the validation split; the
+[model card](research/model_226/MODEL_CARD.md#recordings-and-the-hands-free-mode)
+has both splits.
+
 ## Model
 
 | | |
@@ -215,16 +237,18 @@ included. The test split takes about 75 minutes on an RTX 5070 Ti:
 python tools/evaluate_226.py --videos AUTSL/test --labels AUTSL/test/ground_truth.csv
 ```
 
-With `--cache-landmarks DIR` it saves the landmarks of every frame instead,
-and `tools/evaluate_recording.py --cache DIR` turns the clips into four-second
+With `--cache-landmarks DIR` it saves the landmarks of every frame instead
+(`--cache-fps 12` keeps the frames the live page would send), and
+`tools/evaluate_recording.py --cache DIR` turns the clips into four-second
 recordings with rest around the sign and compares the model's input taken
-from the whole recording and from the cut.
+from the whole recording and from the cut; `--streams` measures the
+hands-free mode. The results are in [Measured on AUTSL](#measured-on-autsl).
 
 ## Scope
 
 - SignTurk recognises isolated signs, one at a time. In the hands-free mode
-  the hands have to come back down between signs; signs that run into each
-  other are read as one.
+  the hands have to come back down for about half a second between signs;
+  signs that run into each other are read as one.
 - A [GPU](#gpu) keeps the live page responsive; on a CPU a recorded sign takes
   a few seconds to process.
 - The sentence engine is rule-based and covers common sentence patterns.

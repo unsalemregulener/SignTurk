@@ -6,8 +6,9 @@
 
 Every AUTSL clip is turned into what the live page would record: its frames
 at 12 per second, with the signer at rest for a while before and after the
-sign (the clip's first and last frames, played back and forth). The table
-compares the model's input taken three ways:
+sign (the clip's first and last frame held). Neighbouring frames are not
+used for that rest: at 12 fps the second-to-last frame is often still on its
+way down. The table compares the model's input taken three ways:
 
 - autsl: 32 frames of the original 30 fps clip, as in the model card (only
   when the cache holds every frame, not with `--cache-fps 12`);
@@ -48,7 +49,6 @@ CAMERA_FPS = 12.0
 FRAMES = 32
 OLD_RECORDING = 32        # frames the live page recorded before
 RECORDING = 48            # 4 seconds at 12 fps
-REST_SECONDS = 0.1        # the start and end of an AUTSL clip that are surely at rest
 
 
 def read_labels(path: Path) -> dict:
@@ -63,13 +63,8 @@ def camera_frames(clip: np.ndarray, fps: float = CAMERA_FPS) -> np.ndarray:
 
 
 def rest(clip: np.ndarray, count: int, at_start: bool) -> np.ndarray:
-    """`count` frames of the signer at rest, from the clip's first or last frames played back and forth."""
-    still_frames = max(2, int(round(REST_SECONDS * SOURCE_FPS)))
-    still = clip[:still_frames] if at_start else clip[-still_frames:][::-1]
-    cycle = np.concatenate([still, still[-2:0:-1]]) if len(still) > 2 else still
-    order = np.resize(np.arange(len(cycle)), count)
-    frames = cycle[order]
-    return frames[::-1] if at_start else frames
+    """`count` frames of the signer at rest: the clip's first or last frame held."""
+    return np.repeat(clip[:1] if at_start else clip[-1:], count, axis=0)
 
 
 def recording(clip: np.ndarray, lead: int, length: int) -> np.ndarray:
@@ -86,7 +81,7 @@ def whole(frames: np.ndarray) -> np.ndarray:
     return frames[sample_indices(len(frames), FRAMES)]
 
 
-CUT = {}                  # span settings for the table and the streams (--margin)
+CUT = {}                  # span settings for the table and the streams (--margin, --away)
 
 
 def cut(frames: np.ndarray, **options) -> np.ndarray:
@@ -230,10 +225,13 @@ def main() -> int:
     parser.add_argument("--grid", action="store_true", help="try span settings instead of the table")
     parser.add_argument("--streams", action="store_true", help="measure the hands-free mode instead of the table")
     parser.add_argument("--margin", type=float, help=f"seconds of rest kept around a cut (default {segment.MARGIN_SECONDS})")
+    parser.add_argument("--away", type=float, help=f"band above rest that still counts as away (default {segment.AWAY})")
     parser.add_argument("--out", type=Path, help="write the table as JSON")
     args = parser.parse_args()
     if args.margin is not None:
         CUT["margin_seconds"] = args.margin
+    if args.away is not None:
+        CUT["away"] = args.away
 
     global SOURCE_FPS
     info = args.cache / "cache.json"
