@@ -86,8 +86,11 @@ def whole(frames: np.ndarray) -> np.ndarray:
     return frames[sample_indices(len(frames), FRAMES)]
 
 
+CUT = {}                  # span settings for the table and the streams (--margin)
+
+
 def cut(frames: np.ndarray, **options) -> np.ndarray:
-    return segment.sign_clip(frames, CAMERA_FPS, FRAMES, **options)[0]
+    return segment.sign_clip(frames, CAMERA_FPS, FRAMES, **{**CUT, **options})[0]
 
 
 class Scorer:
@@ -186,7 +189,7 @@ def evaluate_streams(scorer: Scorer, clips: list, samples: list, truth: np.ndarr
     for settle in (0.25, 0.4, 0.6):
         windows, found, delays = [], [], []
         for number, (frames, _) in enumerate(streams):
-            segmenter = segment.Segmenter(CAMERA_FPS, settle_seconds=settle)
+            segmenter = segment.Segmenter(CAMERA_FPS, settle_seconds=settle, **CUT)
             for position, frame in enumerate(frames):
                 cut_out = segmenter.push(frame)
                 if cut_out is not None:
@@ -226,8 +229,11 @@ def main() -> int:
     parser.add_argument("--limit", type=int, help="use an evenly spread subset of this many clips")
     parser.add_argument("--grid", action="store_true", help="try span settings instead of the table")
     parser.add_argument("--streams", action="store_true", help="measure the hands-free mode instead of the table")
+    parser.add_argument("--margin", type=float, help=f"seconds of rest kept around a cut (default {segment.MARGIN_SECONDS})")
     parser.add_argument("--out", type=Path, help="write the table as JSON")
     args = parser.parse_args()
+    if args.margin is not None:
+        CUT["margin_seconds"] = args.margin
 
     global SOURCE_FPS
     info = args.cache / "cache.json"

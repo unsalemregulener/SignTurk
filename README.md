@@ -27,7 +27,8 @@ can play signs back. The interface and API messages are in Turkish.
 
 ## Live recognition
 
-On the **Canlı Çeviri** page each sign is recorded on its own.
+On the **Canlı Çeviri** page signs are read one at a time. In the **Kayıt**
+mode each sign is recorded on its own:
 
 1. The user presses **İşareti kaydet**. After a 3-2-1 countdown the browser
    captures four seconds of unmirrored frames at about 12 fps (48 frames) and
@@ -37,11 +38,10 @@ On the **Canlı Çeviri** page each sign is recorded on its own.
    keypoints it keeps 17 body points and 21 points per hand: 75 landmarks with
    the signer's own left and right.
 3. When the recording is complete the server cuts the sign out of it, the way
-   AUTSL clips are cut: from where the higher wrist leaves its rest height to
-   where it is back, with 0.15 s of rest on each side. The cut is resampled to
-   32 frames, and the landmarks are centred between the shoulders, scaled by
-   the shoulder width and turned into joint, bone, motion, geometry and hand
-   features.
+   AUTSL clips are cut: from where the higher wrist starts to rise from its
+   rest height to where it is back down. The cut is resampled to 32 frames,
+   and the landmarks are centred between the shoulders, scaled by the shoulder
+   width and turned into joint, bone, motion, geometry and hand features.
 4. Four Keras models score the 226 signs and their probabilities are averaged
    with the weights 0.10, 0.21, 0.55 and 0.14.
 5. The page shows the top three. The first becomes the approval candidate when

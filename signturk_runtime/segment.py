@@ -10,8 +10,12 @@ shoulder line. Its rest height is the lowest position in the recording. The
 sign is where the wrist is clearly above it (`RAISED`). From there the cut
 follows the hands back to rest on both sides: through every frame that is
 still well above rest (`AWAY`) or lower than the frame before it, so a rest
-height that wobbles on a webcam does not stretch the cut. A short margin of
-rest is kept, as in AUTSL.
+height that wobbles on a webcam does not stretch the cut.
+
+The settings were chosen with tools/evaluate_recording.py on AUTSL's
+validation split. RAISED from 0.3 to 0.6 and AWAY from 0.25 to 0.4 cut the
+same frames there; a margin of extra rest around the cut cost accuracy, so
+none is kept.
 """
 
 from __future__ import annotations
@@ -27,7 +31,7 @@ LEFT_SHOULDER, RIGHT_SHOULDER = 11, 12
 
 RAISED = 0.40     # shoulder widths above rest: the hands are signing
 AWAY = 0.25       # shoulder widths above rest: the hands are not back yet
-MARGIN_SECONDS = 0.15
+MARGIN_SECONDS = 0.0    # extra rest kept on each side of the cut
 MIN_REST = 0.6    # if even the lowest wrist position is higher, the hands never rested
 
 

@@ -57,9 +57,9 @@ The browser records four seconds as 48 unmirrored frames at about 12 fps. The
 server runs RTMW on each frame as it arrives, with the person detector on
 every fourth frame. When the recording is complete,
 [`segment.py`](../../signturk_runtime/segment.py) cuts the sign out of it like
-an AUTSL clip, from where the higher wrist leaves its rest height to where it
-is back with 0.15 s of margin, and resamples the cut to the 32 frames the
-ensemble reads. The top sign is offered for approval when its probability is
+an AUTSL clip, from where the higher wrist starts to rise from its rest height
+to where it is back down, and resamples the cut to the 32 frames the ensemble
+reads. The top sign is offered for approval when its probability is
 at least 0.70 and at least 0.12 above the second.
 
 ## Scope

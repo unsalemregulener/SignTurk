@@ -37,7 +37,7 @@ class WristHeightTests(unittest.TestCase):
 
 
 class ActiveSpanTests(unittest.TestCase):
-    def test_finds_the_sign_with_a_short_margin(self):
+    def test_finds_the_sign_from_rest_to_rest(self):
         first, last = active_span(recording(SIGN), FPS)
         self.assertTrue(9 <= first <= 12, first)          # the hands start rising at frame 12
         self.assertTrue(35 <= last <= 38, last)           # and are back at rest at frame 36
