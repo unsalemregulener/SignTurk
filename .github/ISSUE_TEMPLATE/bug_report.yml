@@ -1,0 +1,51 @@
+name: Bug report
+description: Something does not work as described
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for the report. Security problems go through the Security tab instead; see SECURITY.md.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Çeviri
+        2. ...
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - Kayıtla (recording)
+        - Düğmesiz (hands-free)
+        - Not about recognition
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and operating system
+      placeholder: Chrome 141 on Windows 11
+  - type: input
+    id: device
+    attributes:
+      label: Server device
+      description: The `device` under `model_226` in `/api/health`.
+      placeholder: cuda or cpu
+  - type: textarea
+    id: framing
+    attributes:
+      label: Camera and framing
+      description: The camera, how far you sat, and whether the page said "Kadraj uygun".
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Server log lines or the browser console, if any.
+      render: text

@@ -39,7 +39,7 @@ jobs:
       - name: Live sockets through uvicorn
         run: |
           docker cp tests/socket_check.py signturk:/tmp/socket_check.py
-          docker cp docs/videos/cay.mp4 signturk:/tmp/cay.mp4
+          docker cp tests/fixtures/cay.mp4 signturk:/tmp/cay.mp4
           docker exec signturk python /tmp/socket_check.py --video /tmp/cay.mp4
       - name: Container logs
         if: always()

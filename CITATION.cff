@@ -1,0 +1,43 @@
+cff-version: 1.2.0
+message: "If you use SignTurk, please cite it as below."
+type: software
+title: "SignTurk: real-time Turkish Sign Language recognition in the browser"
+abstract: >-
+  SignTurk recognises the 226 signs of the AUTSL dataset from a webcam in the
+  browser, turns the signs the user approves into Turkish sentences and plays
+  signs back on a 3D avatar. It was built as a team graduation project at
+  Eastern Mediterranean University in 2025-2026, supervised by Asst. Prof.
+  Dr. Cem Ergün, and was named an Outstanding Graduation Project.
+authors:
+  - given-names: "Ünsal Emre"
+    family-names: "Gülener"
+  - given-names: "Murathan"
+    family-names: "Ersöz"
+  - given-names: "Eray"
+    family-names: "Kulkızaga"
+  - given-names: "Kerem"
+    family-names: "Salim"
+repository-code: "https://github.com/unsalemregulener/SignTurk"
+license: MIT
+version: 1.0.0
+date-released: "2026-10-19"
+keywords:
+  - turkish sign language
+  - sign language recognition
+  - AUTSL
+  - pose estimation
+  - 3D avatar
+references:
+  - type: article
+    title: "AUTSL: A Large Scale Multi-Modal Turkish Sign Language Dataset and Baseline Methods"
+    authors:
+      - given-names: "Ozge Mercanoglu"
+        family-names: "Sincan"
+      - given-names: "Hacer Yalim"
+        family-names: "Keles"
+    journal: "IEEE Access"
+    volume: 8
+    start: 181340
+    end: 181355
+    year: 2020
+    doi: "10.1109/ACCESS.2020.3028072"

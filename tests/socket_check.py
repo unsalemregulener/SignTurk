@@ -4,7 +4,7 @@ backend_smoke.py talks to the app through FastAPI's test client, which skips
 uvicorn and the websockets package; this check goes through both. CI runs it
 inside the Docker container, where OpenCV and websockets are installed:
 
-    python socket_check.py --video cay.mp4 [--url http://127.0.0.1:8000]
+    python socket_check.py --video tests/fixtures/cay.mp4 [--url http://127.0.0.1:8000]
 """
 
 import argparse
@@ -34,20 +34,27 @@ def post(url, payload):
         return json.loads(response.read())
 
 
+REST_FROM = 4.6  # seconds into the clip from which the hands rest (see backend_smoke.py)
+
+
 def camera_recording(path, seconds=4.0, rest_first=0.0, fps=12):
-    """`seconds` of the recorded camera panel at `fps`, unmirrored, as JPEG data URLs; the first
-    `rest_first` seconds at rest (see backend_smoke.py)."""
+    """`seconds` of the clip at `fps` as JPEG data URLs; the first `rest_first` seconds at rest,
+    and at rest again past the end of the clip (see backend_smoke.py)."""
     capture = cv2.VideoCapture(path)
+    rate = capture.get(cv2.CAP_PROP_FPS)
     frames = []
     while True:
         ok, frame = capture.read()
         if not ok:
             break
-        frames.append(cv2.flip(frame[222:612, 256:882], 1))
+        frames.append(frame)
     capture.release()
-    rest = frames[int(4.5 * 30):]
-    picked = [rest[int(round(i * 30 / fps)) % len(rest)] for i in range(int(round(rest_first * fps)))]
-    picked += [frames[int(round(i * 30 / fps))] for i in range(int(round((seconds - rest_first) * fps)))]
+    step = rate / fps
+    rest = frames[int(REST_FROM * rate):]
+    picked = [rest[int(round(i * step)) % len(rest)] for i in range(int(round(rest_first * fps)))]
+    for i in range(int(round((seconds - rest_first) * fps))):
+        j = int(round(i * step))
+        picked.append(frames[j] if j < len(frames) else rest[(j - len(frames)) % len(rest)])
     clip = []
     for frame in picked:
         ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
@@ -66,7 +73,7 @@ def close_code(ws):
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--url", default="http://127.0.0.1:8000")
-    parser.add_argument("--video", required=True, help="docs/videos/cay.mp4")
+    parser.add_argument("--video", required=True, help="tests/fixtures/cay.mp4")
     args = parser.parse_args()
     ws_url = "ws" + args.url[len("http"):]
 
@@ -92,7 +99,7 @@ def main() -> int:
         print("     cay clip:", [(row["gloss"], row["confidence"]) for row in top])
         check("the cay recording is recognised", bool(top) and top[0]["gloss"] == "cay", result)
 
-    # Hands-free: a second of rest, then the whole video, whose sign ends in rest
+    # Hands-free: a second of rest, then the clip, whose sign ends in rest
     with connect(f"{ws_url}/api/predict/live226") as ws:
         ws.send(json.dumps({"action": "auth", "token": token}))
         ws.send(json.dumps({"action": "continuous"}))

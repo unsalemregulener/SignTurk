@@ -29,6 +29,16 @@ python -m text_processing.eval --check --min-exact 0.98
 python tests/backend_smoke.py
 ```
 
+Interface changes also go through the JSX check, with the Babel version that
+`frontend/app/index.html` loads:
+
+```bash
+npm install --no-save @babel/standalone@7.29.9
+node tools/check_jsx.mjs
+```
+
+Report security problems privately, as described in [SECURITY.md](SECURITY.md).
+
 ## Publishing new model weights
 
 1. Upload the file to a new release (for example `model-assets-v2`).

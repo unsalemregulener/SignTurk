@@ -36,6 +36,20 @@ jobs:
       - name: Model weights are reachable
         run: python tools/download_models.py --check
 
+  interface:
+    name: Interface scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install Babel
+        # The version the page loads, so the check compiles what browsers compile
+        run: npm install --no-save --no-package-lock "@babel/standalone@$(grep -oE '@babel/standalone@[0-9.]+' frontend/app/index.html | cut -d@ -f3)"
+      - name: Compile the JSX
+        run: node tools/check_jsx.mjs
+
   backend:
     name: Backend with the real model
     needs: checks

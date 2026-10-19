@@ -178,7 +178,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="SignTurk API", version="4.0.0", lifespan=lifespan)
+app = FastAPI(title="SignTurk API", version="1.0.0", lifespan=lifespan)
 
 _ALLOWED_ORIGINS = [
     origin.strip()

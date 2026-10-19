@@ -35,7 +35,31 @@ can play signs back. The interface and API messages are in Turkish.
 
 <img src="docs/images/avatar.jpg" alt="3D avatar signing hoşça kal" width="560">
 
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="docs/images/screenshots/translate-result.jpg" alt="Çeviri page in the hands-free mode: ÇAY recognised with 97% confidence, waiting for Doğru or Yanlış"><br><sub>Hands-free: a recognised sign waits for approval</sub></td>
+    <td><img src="docs/images/screenshots/translate-sentence.jpg" alt="Çeviri page after ben, çay and sevmek were approved: the sentence reads Ben çayı seviyorum."><br><sub>Approved signs become “Ben çayı seviyorum.”</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/screenshots/home.png" alt="Home page in the light theme with the sign of the day and statistics"><br><sub>Home page with the sign of the day</sub></td>
+    <td><img src="docs/images/screenshots/dictionary.png" alt="Dictionary with the avatar playing selam"><br><sub>Dictionary: the avatar shows how a sign is made</sub></td>
+  </tr>
+</table>
+
 ## Live recognition
+
+```mermaid
+flowchart LR
+  cam["Webcam<br/>12 fps"] -- WebSocket --> pose["YOLOX + RTMW<br/>75 landmarks"]
+  pose --> cut["Sign cut<br/>and features"]
+  cut --> ens["Four-stream<br/>ensemble"]
+  ens --> ok{"Doğru?"}
+  ok -- yes --> sentence["Turkish sentence,<br/>speech, history"]
+  ok -- no --> cam
+  ens -. "Nasıl yapılır?" .-> avatar["3D avatar"]
+```
 
 On the **Çeviri** page signs are read one at a time. In the **Kayıtla**
 mode each sign is recorded on its own:
@@ -195,7 +219,8 @@ runs with registered users only.
 Authenticated routes take `Authorization: Bearer <token>`; the token comes
 from `/api/login`. Browsers cannot set headers on WebSockets, so the live
 socket expects it as its first message, `{"action": "auth", "token": "…"}`,
-which keeps it out of URLs and access logs.
+which keeps it out of URLs and access logs. With the server running, FastAPI
+serves interactive documentation of the HTTP routes at `/docs`.
 
 | Route | Access | Purpose |
 | --- | --- | --- |
@@ -238,7 +263,7 @@ frontend/app/          interface: React from a CDN, one script per page, styles 
 frontend/              avatar page, three.js r128, avatar.glb, fonts
 landmarks/             226 landmark sequences for the avatar
 tools/                 download_models.py, evaluate_226.py, evaluate_recording.py, extract_landmarks.py (avatar files from AUTSL)
-tests/                 unit tests, the end-to-end check (backend_smoke.py), the socket check
+tests/                 unit tests, the end-to-end check (backend_smoke.py), the socket check, a recorded çay sign (fixtures/)
 LICENSES/              license of the code adapted from rtmlib
 ```
 
@@ -249,13 +274,16 @@ python -m unittest discover -s tests
 python -m text_processing.eval --check --min-exact 0.98
 ruff check .
 python tests/backend_smoke.py      # needs requirements-dev.txt and the weights
+node tools/check_jsx.mjs           # after npm install --no-save @babel/standalone@7.29.9
 ```
 
-CI runs all of them on every push and pull request, the last one with the
-real models: it sends four-second webcam recordings through the live socket,
-one of them with a second of rest before the sign. It also checks that every
-weight URL is reachable, and builds and starts the Docker image, where
-`tests/socket_check.py` sends a recording through uvicorn.
+CI runs all of them on every push and pull request, the end-to-end check with
+the real models: it sends four-second webcam recordings through the live
+socket, one of them with a second of rest before the sign. It also checks that
+every weight URL is reachable, compiles the interface's JSX with the Babel
+version the page loads, and builds and starts the Docker image, where
+`tests/socket_check.py` sends a recording through uvicorn. CodeQL scans the
+Python and JavaScript code on every push and once a week.
 
 `tools/evaluate_226.py` measures the model on AUTSL videos, which are not
 included. The test split takes about 75 minutes on an RTX 5070 Ti:
@@ -270,6 +298,15 @@ With `--cache-landmarks DIR` it saves the landmarks of every frame instead
 recordings with rest around the sign and compares the model's input taken
 from the whole recording and from the cut; `--streams` measures the
 hands-free mode. The results are in [Measured on AUTSL](#measured-on-autsl).
+
+## Privacy and accessibility
+
+- Camera frames are processed in memory: the server reads landmarks from them
+  and keeps no images or video. A user's history holds only the words they
+  approved.
+- Text keeps a contrast of at least 4.5:1 in both themes, keyboard focus is
+  always visible, Space records, Enter approves and Esc rejects, and the
+  interface follows the system's reduced-motion setting.
 
 ## Scope
 
@@ -291,13 +328,28 @@ O. M. Sincan and H. Y. Keles, *AUTSL: A Large Scale Multi-Modal Turkish Sign
 Language Dataset and Baseline Methods*, IEEE Access, 2020. The videos are not
 included; their use is governed by the dataset's own terms.
 
-## Team and role
+## Acknowledgements
+
+Asst. Prof. Dr. Cem Ergün, who supervised the project; the AUTSL dataset by
+Sincan and Keles; RTMW and the YOLOX person detector from OpenMMLab's MMPose,
+with code adapted from rtmlib; three.js; the Mixamo character; Phosphor Icons;
+and the Plus Jakarta Sans and Lexend typefaces.
+
+## Team
 
 SignTurk was built as a team graduation project at Eastern Mediterranean
-University in 2025–2026 and was named an Outstanding Graduation Project. My
-part was the LLM/NLP and data workflows: dataset preparation, preprocessing,
-validation and sentence-generation pipeline integration. I also supported the
-interface and the 3D avatar integration.
+University in 2025–2026, supervised by Asst. Prof. Dr. Cem Ergün, and was
+named an Outstanding Graduation Project.
+
+| Member | Role |
+| --- | --- |
+| [Ünsal Emre Gülener](https://github.com/unsalemregulener) | LLM/NLP and data workflows: dataset preparation, preprocessing, validation and the sentence-generation pipeline; also the interface and the 3D avatar integration |
+| Murathan Ersöz | Database |
+| Eray Kulkızaga | Model training |
+| Kerem Salim | 3D avatar |
+
+This repository is maintained by Ünsal Emre Gülener. To cite SignTurk, use
+**Cite this repository** on GitHub, which reads [CITATION.cff](CITATION.cff).
 
 ## License
 

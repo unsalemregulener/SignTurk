@@ -45,23 +45,34 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + (f"  [{detail}]" if detail and not ok else ""))
 
 
-def camera_frames(path):
-    """Unmirrored camera-panel frames of the recorded interface (BGR, 30 fps).
+REST_FROM = 4.6  # seconds into the clip from which the hands rest
 
-    docs/videos/cay.mp4 is a screen recording: it starts in the middle of the
-    sign, the hands come down at about 3.5 s and rest from 4.5 s on. The camera
-    preview on screen was mirrored, so the panel is cropped and flipped back to
-    the frames the browser sent.
+
+def camera_frames(path):
+    """The clip's frames (BGR) and its frame rate.
+
+    tests/fixtures/cay.mp4 is the camera picture of a recorded session, cut and
+    unmirrored: it starts in the middle of the çay sign, the hands are down at
+    about 3.6 s and rest from REST_FROM on. The live page's overlays are drawn in.
     """
     capture = cv2.VideoCapture(str(path))
+    rate = capture.get(cv2.CAP_PROP_FPS)
     frames = []
     while True:
         ok, frame = capture.read()
         if not ok:
             break
-        frames.append(cv2.flip(frame[222:612, 256:882], 1))
+        frames.append(frame)
     capture.release()
-    return frames
+    return frames, rate
+
+
+def close_up(frame, keep=0.6):
+    """The upper middle of a frame scaled back up: the signer as a camera close to them sees them."""
+    height, width = frame.shape[:2]
+    crop_w, crop_h = int(width * keep), int(height * keep)
+    left = (width - crop_w) // 2
+    return cv2.resize(frame[:crop_h, left:left + crop_w], (width, height))
 
 
 def data_url(frame):
@@ -70,12 +81,15 @@ def data_url(frame):
 
 
 def camera_recording(path, seconds=4.0, rest_first=0.0, fps=12):
-    """What the live page sends: `seconds` of frames at `fps` as data URLs, the first `rest_first` at rest."""
-    frames = camera_frames(path)
-    step = 30 / fps
-    rest = frames[int(4.5 * 30):]
+    """What the live page sends: `seconds` of frames at `fps` as data URLs, the first `rest_first`
+    at rest; past the end of the clip the hands stay at rest."""
+    frames, rate = camera_frames(path)
+    step = rate / fps
+    rest = frames[int(REST_FROM * rate):]
     picked = [rest[int(round(i * step)) % len(rest)] for i in range(int(round(rest_first * fps)))]
-    picked += [frames[int(round(i * step))] for i in range(int(round((seconds - rest_first) * fps)))]
+    for i in range(int(round((seconds - rest_first) * fps))):
+        j = int(round(i * step))
+        picked.append(frames[j] if j < len(frames) else rest[(j - len(frames)) % len(rest)])
     return [data_url(frame) for frame in picked]
 
 
@@ -211,16 +225,19 @@ with TestClient(backend.app) as client:
               all(datetime.fromisoformat(row["created_at"]).utcoffset() is not None for row in history), history)
         check("summary counts approved words", client.get("/api/me/summary", headers=U).json()["translations"] == 3)
 
-        video = ROOT / "docs" / "videos" / "cay.mp4"
+        video = ROOT / "tests" / "fixtures" / "cay.mp4"
         clip = camera_recording(video)
         check("a recording is four seconds", len(clip) == status["record_frames"] == 48, (len(clip), status))
         default_every = backend.LIVE226.detect_every
         backend.LIVE226.reset_timings()
         with live_socket(client, user_token) as ws:
-            # The demo video was recorded close to the camera: the frame ends just below the shoulders
+            # The clip frames the signer like AUTSL; its close-up ends just below the shoulders
             ws.send_text(json.dumps({"image": clip[0], "preview": True}))
             framing = ws.receive_json()
             check("a preview frame gets a framing check", framing.get("type") == "framing" and "ok" in framing, framing)
+            check("a signer sitting back is framed well", framing.get("ok") is True, framing)
+            ws.send_text(json.dumps({"image": data_url(close_up(camera_frames(video)[0][0])), "preview": True}))
+            framing = ws.receive_json()
             check("a close camera is told to move back", framing.get("hint") == "Biraz geri çekilin", framing)
             started_ok, result, processed = record(ws, clip)
             check("recording starts", started_ok)
@@ -268,7 +285,7 @@ with TestClient(backend.app) as client:
               f"detect {timing['avg_detect_ms']} ms, pose {timing['avg_pose_ms']} ms per frame")
         check("the other detection setting also works", len(other.get("top", [])) == 3, other)
 
-        # Hands-free: a second of rest, then the whole video, whose sign ends in rest
+        # Hands-free: a second of rest, then the clip, whose sign ends in rest
         setting = backend.LIVE226.continuous_setting
         check("health tells whether the hands-free mode is offered",
               isinstance(client.get("/api/health").json()["model_226"].get("continuous"), bool))
