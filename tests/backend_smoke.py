@@ -193,6 +193,11 @@ with TestClient(backend.app) as client:
     check("text API corrects without audio", r.status_code == 200 and r.json()["sentence"] == "Ben okula gidiyorum."
           and r.json()["tts_status"] == "disabled", r.text)
     check("text cache is admin only", client.delete("/api/text/cache", headers=U).status_code == 403)
+    check("audio route refuses names the speech engine does not write",
+          all(client.get(f"/api/text/audio/{name}", headers=U).status_code == 400
+              for name in ("D:secret.wav", "C:local_dev.db", "..%5Clocal_dev.db", "tts_x.mp3", "local_dev.db")))
+    check("audio route answers 404 for a missing speech file",
+          client.get("/api/text/audio/tts_0123456789ab.mp3", headers=U).status_code == 404)
 
     status = wait_for_model(client)
     check("model ready", status["ready"], status)

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Dict, Optional
@@ -49,6 +50,8 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 TTS_OUTPUT_DIR = BASE_DIR / "uploads" / "tts"
 TTS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+# The names the speech engine gives its files (tts.py): tts_<12 hex digits>.mp3 or .wav
+_AUDIO_NAME = re.compile(r"tts_[0-9a-f]{12}\.(?:mp3|wav)")
 
 router = APIRouter(prefix="/api/text", tags=["text-processing"])
 # Operational endpoints (cache management). The main app mounts this router
@@ -313,11 +316,14 @@ def unload_model(model_key: str) -> Dict[str, object]:
 
 @router.get("/audio/{filename}")
 def get_audio(filename: str) -> FileResponse:
-    if "/" in filename or "\\" in filename or ".." in filename:
+    # Only the speech engine's own files, and only inside its folder: on Windows a name
+    # such as "D:x" would otherwise lead to the current folder of another drive.
+    base = os.path.normpath(TTS_OUTPUT_DIR.resolve())
+    audio_path = os.path.normpath(os.path.join(base, filename))
+    if not _AUDIO_NAME.fullmatch(filename) or not audio_path.startswith(base + os.sep):
         raise HTTPException(status_code=400, detail="invalid filename")
-    audio_path = TTS_OUTPUT_DIR / filename
-    if not audio_path.is_file():
+    if not os.path.isfile(audio_path):
         raise HTTPException(status_code=404, detail="audio not found")
-    media_type = "audio/wav" if filename.lower().endswith(".wav") else "audio/mpeg"
+    media_type = "audio/wav" if filename.endswith(".wav") else "audio/mpeg"
     return FileResponse(audio_path, media_type=media_type, filename=filename)
 
